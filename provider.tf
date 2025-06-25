@@ -9,18 +9,24 @@ terraform {
     # Used to output the kubeconfig to the local dir for local cluster access
     local = {
       source  = "hashicorp/local"
-      version = "2.4.0"
+      version = "2.5.1"
     }
 
     # Used to provision helm charts into the k8s cluster
     helm = {
       source  = "hashicorp/helm"
-      version = "2.10.1"
+      version = "2.13.1"
     }
 
     kubernetes = {
       source  = "hashicorp/kubernetes"
-      version = "2.22.0"
+      version = "2.31.0"
+    }
+
+    # Used to manage DNS records in Cloudflare
+    cloudflare = {
+      source = "cloudflare/cloudflare"
+      version = "5.5.0"
     }
   }
 }

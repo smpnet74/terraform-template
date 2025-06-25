@@ -61,4 +61,22 @@ variable "object_store_prefix" {
   default     = "tf-template-"
 }
 
+# Cloudflare
+variable "cloudflare_api_token" {
+  description = "Cloudflare API Token"
+  type        = string
+  sensitive   = true
+}
+
+variable "cloudflare_zone_id" {
+  description = "Cloudflare Zone ID for the domain"
+  type        = string
+}
+
+variable "domain_name" {
+  description = "The domain name to use for the ingress"
+  type        = string
+  default     = "timbersedgearb.com"
+}
+
 # Output

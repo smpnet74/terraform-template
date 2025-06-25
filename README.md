@@ -36,10 +36,11 @@ This is an overview of the infrastructure being managed by this repo.
 
 ## Terraform Provider Documentation
 
-* https://registry.terraform.io/providers/civo/civo/1.0.21
-* https://registry.terraform.io/providers/hashicorp/helm/2.6.0
-* https://registry.terraform.io/providers/hashicorp/kubernetes/2.11.0
-* https://registry.terraform.io/providers/hashicorp/local/2.2.3
+* https://registry.terraform.io/providers/civo/civo/1.0.35
+* https://registry.terraform.io/providers/hashicorp/helm/2.10.1
+* https://registry.terraform.io/providers/hashicorp/kubernetes/2.22.0
+* https://registry.terraform.io/providers/hashicorp/local/2.4.0
+* https://registry.terraform.io/providers/cloudflare/cloudflare/4.52.0
 
 ## Variables
 
@@ -50,6 +51,9 @@ This is an overview of the infrastructure being managed by this repo.
 | kubernetes_api_access |  list | list of IP addresses / subnets to allow access to the cluster api | [ "0.0.0.0/0" ] |
 | cluster_web_access | list | list of IP addresses / subnets to allow access to port 80 | [ "0.0.0.0/0" ] |
 | cluster_websecure_access | list | list of IP addresses / subnets to allow access to port 443 | [ "0.0.0.0/0" ] |
+| cloudflare_api_token | string | Cloudflare API Token | (sensitive) |
+| cloudflare_zone_id | string | Cloudflare Zone ID for the domain | "" |
+| domain_name | string | The domain name to use for the ingress | "timbersedgearb.com" |
 
 ## Contribution Guide
 
