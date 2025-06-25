@@ -25,9 +25,22 @@ terraform {
 
     # Used to manage DNS records in Cloudflare
     cloudflare = {
-      source = "cloudflare/cloudflare"
+      source  = "cloudflare/cloudflare"
       version = "5.5.0"
     }
+
+    # Used to manage the github repository for GitOps
+    github = {
+      source  = "integrations/github"
+      version = "~> 6.0"
+    }
+
+    # Used to apply raw Kubernetes YAML, avoiding provider caching issues
+    kubectl = {
+      source  = "gavinbunney/kubectl"
+      version = "~> 1.14"
+    }
+
   }
 }
 

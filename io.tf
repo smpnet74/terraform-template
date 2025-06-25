@@ -69,14 +69,31 @@ variable "cloudflare_api_token" {
 }
 
 variable "cloudflare_zone_id" {
-  description = "Cloudflare Zone ID for the domain"
+  description = "The zone ID for the domain."
+  type        = string
+}
+
+variable "cloudflare_email" {
+  description = "The email address associated with the Cloudflare account, for Let's Encrypt."
   type        = string
 }
 
 variable "domain_name" {
-  description = "The domain name to use for the ingress"
   type        = string
+  description = "The domain name to use for the application"
   default     = "timbersedgearb.com"
+}
+
+variable "github_token" {
+  type        = string
+  description = "The GitHub token to use for creating and managing the GitOps repository"
+  sensitive   = true
+}
+
+variable "github_repo_name" {
+  type        = string
+  description = "The name of the repository to create for GitOps"
+  default     = "k8s-app-configs"
 }
 
 # Output
