@@ -1,6 +1,6 @@
 # Kubernetes GitOps Deployment with Terraform
 
-This repository contains a complete solution for deploying and managing a Kubernetes cluster on Civo using Terraform, with GitOps principles implemented through Argo CD. The architecture includes Traefik as an ingress controller, cert-manager for automated TLS certificates via Cloudflare DNS, and a GitHub repository for application manifests.
+This repository contains a complete solution for deploying and managing a Kubernetes cluster on Civo using Terraform, with GitOps principles implemented through Argo CD. The architecture includes Traefik as an ingress controller, cert-manager for automated TLS certificates via Cloudflare DNS-01 challenge, and a GitHub repository for application manifests using the "App of Apps" pattern.
 
 ## Architecture Overview
 
@@ -9,9 +9,9 @@ This solution implements a complete GitOps workflow with the following component
 1. **Civo Kubernetes Cluster**: Managed Kubernetes cluster on Civo Cloud
 2. **Traefik Ingress Controller**: Handles incoming traffic to the cluster
 3. **Argo CD**: GitOps continuous delivery tool that synchronizes the desired state from Git
-4. **cert-manager**: Automates TLS certificate issuance and renewal using Let's Encrypt
-5. **GitHub Repository**: Stores Kubernetes manifests for applications (App of Apps pattern)
-6. **Cloudflare DNS**: Manages DNS records and facilitates DNS-01 challenge for certificate issuance
+4. **cert-manager**: Automates TLS certificate issuance and renewal using Let's Encrypt with Cloudflare DNS-01 challenge
+5. **GitHub Repository**: Stores Kubernetes manifests for applications using the "App of Apps" pattern
+6. **Cloudflare DNS**: Manages DNS records with wildcard support and facilitates DNS-01 challenge for certificate issuance
 
 ## File Structure and Purpose
 
@@ -132,10 +132,11 @@ To add a new application:
 
 The solution includes automatic TLS certificate issuance and renewal:
 
-1. cert-manager is installed and configured with Let's Encrypt ClusterIssuers
+1. cert-manager is installed and configured with Let's Encrypt ClusterIssuers (both staging and production)
 2. DNS-01 challenge is used with Cloudflare for domain validation
-3. Ingress resources are annotated to request certificates automatically
-4. Certificates are stored as Kubernetes secrets and used by Traefik
+3. Test subdomains (e.g., `test-argocd`, `test-nginx`) are used to avoid Let's Encrypt rate limits
+4. Ingress resources are annotated to request certificates automatically
+5. Certificates are stored as Kubernetes secrets and used by Traefik for TLS termination
 
 ## Troubleshooting
 
@@ -154,13 +155,19 @@ If certificates are not being issued:
 1. Check the cert-manager logs: `kubectl logs -n cert-manager -l app=cert-manager`
 2. Verify the Cloudflare API token has the correct permissions
 3. Check Certificate resources: `kubectl get certificates -A`
+4. Check for Let's Encrypt rate limits (5 certificates per domain per week)
+5. Use test subdomains to avoid hitting rate limits during development and testing
+6. Monitor certificate status: `kubectl get challenges,orders,certificates -A`
 
 ## Important Notes
 
 1. The deployment is configured to use Let's Encrypt production environment by default
-2. Both staging and production ClusterIssuers are created, but the ingress is configured to use the production issuer
-3. Argo CD admin password is randomly generated; retrieve it using the provided command
-4. Custom Resource Definitions (CRDs) from Helm charts may remain after `terraform destroy`
+2. Both staging and production ClusterIssuers are created, but the ingress resources are configured to use the production issuer
+3. Test subdomains (e.g., `test-argocd.yourdomain.com`, `test-nginx.yourdomain.com`) are used to avoid Let's Encrypt rate limits
+4. Argo CD admin password is randomly generated; retrieve it using the provided command
+5. The repository includes a controlled destroy process with delays to avoid Terraform dependency issues
+6. Custom Resource Definitions (CRDs) from Helm charts may remain after `terraform destroy`
+7. A wildcard DNS record is configured in Cloudflare to support all subdomains
 
 ## Security Considerations
 
