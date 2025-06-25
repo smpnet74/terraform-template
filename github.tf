@@ -8,34 +8,7 @@ resource "github_repository" "argocd_apps" {
   visibility  = "public"
 }
 
-resource "github_repository_file" "longhorn_app" {
-  repository = github_repository.argocd_apps.name
-  file       = "apps/longhorn.yaml"
-  content    = <<-EOF
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: longhorn
-  namespace: argocd
-spec:
-  project: default
-  source:
-    repoURL: https://charts.longhorn.io
-    chart: longhorn
-    targetRevision: 1.8.2
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: longhorn-system
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-    syncOptions:
-    - CreateNamespace=true
-EOF
-
-  depends_on = [github_repository.argocd_apps]
-}
+# Longhorn application has been removed
 
 resource "github_repository_file" "nginx_app" {
   repository = github_repository.argocd_apps.name
@@ -109,9 +82,10 @@ metadata:
   namespace: default
   annotations:
     kubernetes.io/ingress.class: traefik
+    cert-manager.io/cluster-issuer: letsencrypt-prod
 spec:
   rules:
-  - host: nginx.${var.domain_name}
+  - host: test-nginx.${var.domain_name}
     http:
       paths:
       - path: /
@@ -121,6 +95,10 @@ spec:
             name: nginx
             port:
               number: 80
+  tls:
+  - hosts:
+    - test-nginx.${var.domain_name}
+    secretName: nginx-tls
 EOF
 
   depends_on = [github_repository.argocd_apps]

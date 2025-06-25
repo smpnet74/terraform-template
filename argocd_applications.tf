@@ -23,8 +23,8 @@ EOF
 
   depends_on = [
     helm_release.argocd,
-    github_repository_file.longhorn_app,
     github_repository_file.nginx_app,
     github_repository_file.nginx_manifest,
+    time_sleep.wait_for_cluster
   ]
 }

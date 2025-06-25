@@ -122,6 +122,45 @@ provider "registry.terraform.io/hashicorp/local" {
   ]
 }
 
+provider "registry.terraform.io/hashicorp/null" {
+  version = "3.2.4"
+  hashes = [
+    "h1:L5V05xwp/Gto1leRryuesxjMfgZwjb7oool4WS1UEFQ=",
+    "zh:59f6b52ab4ff35739647f9509ee6d93d7c032985d9f8c6237d1f8a59471bbbe2",
+    "zh:78d5eefdd9e494defcb3c68d282b8f96630502cac21d1ea161f53cfe9bb483b3",
+    "zh:795c897119ff082133150121d39ff26cb5f89a730a2c8c26f3a9c1abf81a9c43",
+    "zh:7b9c7b16f118fbc2b05a983817b8ce2f86df125857966ad356353baf4bff5c0a",
+    "zh:85e33ab43e0e1726e5f97a874b8e24820b6565ff8076523cc2922ba671492991",
+    "zh:9d32ac3619cfc93eb3c4f423492a8e0f79db05fec58e449dee9b2d5873d5f69f",
+    "zh:9e15c3c9dd8e0d1e3731841d44c34571b6c97f5b95e8296a45318b94e5287a6e",
+    "zh:b4c2ab35d1b7696c30b64bf2c0f3a62329107bd1a9121ce70683dec58af19615",
+    "zh:c43723e8cc65bcdf5e0c92581dcbbdcbdcf18b8d2037406a5f2033b1e22de442",
+    "zh:ceb5495d9c31bfb299d246ab333f08c7fb0d67a4f82681fbf47f2a21c3e11ab5",
+    "zh:e171026b3659305c558d9804062762d168f50ba02b88b231d20ec99578a6233f",
+    "zh:ed0fe2acdb61330b01841fa790be00ec6beaac91d41f311fb8254f74eb6a711f",
+  ]
+}
+
+provider "registry.terraform.io/hashicorp/time" {
+  version     = "0.10.0"
+  constraints = "~> 0.10.0"
+  hashes = [
+    "h1:NAl8eupFAZXCAbE5uiHZTz+Yqler55B3fMG+jNPrjjM=",
+    "zh:0ab31efe760cc86c9eef9e8eb070ae9e15c52c617243bbd9041632d44ea70781",
+    "zh:0ee4e906e28f23c598632eeac297ab098d6d6a90629d15516814ab90ad42aec8",
+    "zh:3bbb3e9da728b82428c6f18533b5b7c014e8ff1b8d9b2587107c966b985e5bcc",
+    "zh:6771c72db4e4486f2c2603c81dfddd9e28b6554d1ded2996b4cb37f887b467de",
+    "zh:78d5eefdd9e494defcb3c68d282b8f96630502cac21d1ea161f53cfe9bb483b3",
+    "zh:833c636d86c2c8f23296a7da5d492bdfd7260e22899fc8af8cc3937eb41a7391",
+    "zh:c545f1497ae0978ffc979645e594b57ff06c30b4144486f4f362d686366e2e42",
+    "zh:def83c6a85db611b8f1d996d32869f59397c23b8b78e39a978c8a2296b0588b2",
+    "zh:df9579b72cc8e5fac6efee20c7d0a8b72d3d859b50828b1c473d620ab939e2c7",
+    "zh:e281a8ecbb33c185e2d0976dc526c93b7359e3ffdc8130df7422863f4952c00e",
+    "zh:ecb1af3ae67ac7933b5630606672c94ec1f54b119bf77d3091f16d55ab634461",
+    "zh:f8109f13e07a741e1e8a52134f84583f97a819e33600be44623a21f6424d6593",
+  ]
+}
+
 provider "registry.terraform.io/integrations/github" {
   version     = "6.6.0"
   constraints = "~> 6.0"

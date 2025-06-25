@@ -63,18 +63,18 @@ variable "object_store_prefix" {
 
 # Cloudflare
 variable "cloudflare_api_token" {
-  description = "Cloudflare API Token"
+  description = "Cloudflare API token for DNS management"
   type        = string
   sensitive   = true
 }
 
 variable "cloudflare_zone_id" {
-  description = "The zone ID for the domain."
+  description = "Cloudflare Zone ID for the domain"
   type        = string
 }
 
 variable "cloudflare_email" {
-  description = "The email address associated with the Cloudflare account, for Let's Encrypt."
+  description = "Cloudflare account email"
   type        = string
 }
 

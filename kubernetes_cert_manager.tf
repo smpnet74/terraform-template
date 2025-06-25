@@ -12,6 +12,7 @@ resource "kubernetes_secret" "cloudflare_api_token_secret" {
 
   depends_on = [
     helm_release.cert_manager,
+    time_sleep.wait_for_cluster
   ]
 }
 

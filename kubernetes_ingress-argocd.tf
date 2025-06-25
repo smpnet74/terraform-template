@@ -10,7 +10,7 @@ resource "kubernetes_ingress_v1" "argocd" {
 
   spec {
     rule {
-      host = "argocd.${var.domain_name}"
+      host = "test-argocd.${var.domain_name}"
       http {
         path {
           path_type = "Prefix"
@@ -27,7 +27,7 @@ resource "kubernetes_ingress_v1" "argocd" {
       }
     }
     tls {
-      hosts      = ["argocd.${var.domain_name}"]
+      hosts      = ["test-argocd.${var.domain_name}"]
       secret_name = "argocd-tls"
     }
   }

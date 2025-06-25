@@ -41,6 +41,12 @@ terraform {
       version = "~> 1.14"
     }
 
+    # Used to manage time
+    time = {
+      source  = "hashicorp/time"
+      version = "~> 0.10.0"
+    }
+
   }
 }
 
