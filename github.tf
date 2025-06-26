@@ -82,7 +82,7 @@ metadata:
   namespace: default
   annotations:
     kubernetes.io/ingress.class: traefik
-    cert-manager.io/cluster-issuer: letsencrypt-prod
+    cert-manager.io/cluster-issuer: letsencrypt-staging
 spec:
   rules:
   - host: test-nginx.${var.domain_name}

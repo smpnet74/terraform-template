@@ -4,7 +4,7 @@ resource "kubernetes_ingress_v1" "argocd" {
     namespace = "argocd"
     annotations = {
       "kubernetes.io/ingress.class"    = "traefik"
-      "cert-manager.io/cluster-issuer" = "letsencrypt-prod"
+      "cert-manager.io/cluster-issuer" = "letsencrypt-staging"
     }
   }
 
@@ -35,6 +35,6 @@ resource "kubernetes_ingress_v1" "argocd" {
   depends_on = [
     helm_release.argocd,
     helm_release.traefik_ingress,
-    kubectl_manifest.letsencrypt_prod_issuer,
+    kubectl_manifest.letsencrypt_issuer,
   ]
 }
