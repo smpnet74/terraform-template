@@ -1,4 +1,4 @@
-# Kubernetes GitOps Deployment with Terraform
+# Kubernetes GitOps Deployment with Terraform *
 
 This repository contains a complete solution for deploying and managing a Kubernetes cluster on Civo using Terraform, with GitOps principles implemented through Argo CD. The architecture includes Traefik as an ingress controller, cert-manager for automated TLS certificates via Cloudflare DNS-01 challenge, and a GitHub repository for application manifests using the "App of Apps" pattern.
 
