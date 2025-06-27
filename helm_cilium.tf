@@ -29,7 +29,12 @@ hubble:
   flowRetention: 1h
   eventQueueSize: 1048576
   metrics:
-    enabled: true
+    enabled:
+      - dns
+      - drop
+      - tcp
+      - flow
+      - icmp
     serviceMonitor:
       enabled: false
 metrics:
@@ -42,7 +47,8 @@ EOF
         --namespace kube-system \
         --reset-values \
         --reuse-values \
-        --values cilium_values.yaml
+        --values cilium_values.yaml \
+        --kubeconfig ${path.module}/kubeconfig
     EOT
   }
 }

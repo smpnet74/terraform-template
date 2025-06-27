@@ -9,5 +9,16 @@ hubble:
     enabled: true
   ui:
     enabled: true
+  flowRetention: 1h
+  eventQueueSize: 1048576
+  metrics:
+    enabled:
+      - dns
+      - drop
+      - tcp
+      - flow
+      - icmp
+    serviceMonitor:
+      enabled: false
 metrics:
   enabled: true
