@@ -27,7 +27,7 @@ hubble:
   ui:
     enabled: true
   flowRetention: 1h
-  eventQueueSize: 1048576
+  eventQueueSize: "1048576"
   metrics:
     enabled:
       - dns

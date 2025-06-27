@@ -11,8 +11,9 @@ resource "helm_release" "argocd" {
   namespace  = kubernetes_namespace.argocd.metadata[0].name
   version    = "7.3.8"
 
-  wait   = true
-  atomic = true
+  wait    = true
+  atomic  = false  # Set to false to prevent rollback on timeout
+  timeout = 900    # 15 minutes
 
   # The key insight: server.insecure must be set as an extraArg with empty string value
   # And the URL must be set in the ConfigMap (cm) section
@@ -30,5 +31,7 @@ resource "helm_release" "argocd" {
 
   depends_on = [
     kubernetes_namespace.argocd,
+    helm_release.kgateway,  # Ensure Kgateway is deployed first
+    helm_release.cert_manager  # Ensure cert-manager is deployed first
   ]
 }

@@ -1,6 +1,6 @@
 output "argocd_url" {
   description = "The URL for the Argo CD web UI."
-  value       = "https://${kubernetes_ingress_v1.argocd.spec[0].rule[0].host}"
+  value       = "https://test-argocd.${var.domain_name}"
 }
 
 output "argocd_password_instructions" {

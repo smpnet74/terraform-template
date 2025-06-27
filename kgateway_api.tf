@@ -54,13 +54,15 @@ resource "helm_release" "kgateway" {
   version          = "v2.0.2"  # Latest stable release as per docs
   namespace        = "kgateway-system"
   create_namespace = true
-  atomic           = true
+  atomic           = false  # Set to false to prevent rollback on timeout
   cleanup_on_fail  = true
   wait             = true
+  timeout          = 900    # 15 minutes
 
   depends_on = [
     helm_release.kgateway_crds,
-    time_sleep.wait_for_kgateway_crds
+    time_sleep.wait_for_kgateway_crds,
+    helm_release.cert_manager  # Ensure cert-manager is deployed first
   ]
 }
 

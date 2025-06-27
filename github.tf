@@ -75,30 +75,26 @@ spec:
       port: 80
       targetPort: 80
 ---
-apiVersion: networking.k8s.io/v1
-kind: Ingress
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
 metadata:
-  name: nginx-ingress
+  name: nginx-route
   namespace: default
-  annotations:
-    kubernetes.io/ingress.class: traefik
-    cert-manager.io/cluster-issuer: letsencrypt-staging
 spec:
+  parentRefs:
+  - name: default-gateway
+    namespace: default
+    kind: Gateway
+  hostnames:
+  - "test-nginx.${var.domain_name}"
   rules:
-  - host: test-nginx.${var.domain_name}
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: nginx
-            port:
-              number: 80
-  tls:
-  - hosts:
-    - test-nginx.${var.domain_name}
-    secretName: nginx-tls
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: nginx
+      port: 80
 EOF
 
   depends_on = [github_repository.argocd_apps]
