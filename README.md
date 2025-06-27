@@ -1,54 +1,60 @@
 # Kubernetes GitOps Deployment with Terraform *
 
-This repository contains a complete solution for deploying and managing a Kubernetes cluster on Civo using Terraform, with GitOps principles implemented through Argo CD. The architecture includes Traefik as an ingress controller, cert-manager for automated TLS certificates via Cloudflare DNS-01 challenge, and a GitHub repository for application manifests using the "App of Apps" pattern.
+This repository provides a Terraform-based solution to deploy and manage a Civo Kubernetes cluster with GitOps via Argo CD. It leverages Cilium CNI with Hubble for networking and observability, cert-manager for automated TLS (Let's Encrypt via Cloudflare DNS-01), Gateway API & Kgateway for ingress, and a GitHub repository hosting application manifests using the App-of-Apps pattern.
 
 ## Architecture Overview
 
 This solution implements a complete GitOps workflow with the following components:
 
-1. **Civo Kubernetes Cluster**: Managed Kubernetes cluster on Civo Cloud
-2. **Traefik Ingress Controller**: Handles incoming traffic to the cluster
-3. **Argo CD**: GitOps continuous delivery tool that synchronizes the desired state from Git
-4. **cert-manager**: Automates TLS certificate issuance and renewal using Let's Encrypt with Cloudflare DNS-01 challenge
-5. **GitHub Repository**: Stores Kubernetes manifests for applications using the "App of Apps" pattern
-6. **Cloudflare DNS**: Manages DNS records with wildcard support and facilitates DNS-01 challenge for certificate issuance
+1. **Civo Kubernetes Cluster**: Managed cluster on Civo Cloud
+2. **Cilium CNI & Hubble**: Provides pod networking, network policies, and observability
+3. **Gateway API & Kgateway**: Implements modern HTTP/HTTPS ingress
+4. **cert-manager**: Automates TLS certificate issuance/renewal (Let's Encrypt via Cloudflare DNS-01)
+5. **Argo CD**: GitOps continuous delivery tool syncing application manifests
+6. **GitHub Repository**: Hosts application manifests using the App-of-Apps pattern
+7. **Cloudflare DNS**: Manages DNS A records and ACME challenge validation
 
 ## File Structure and Purpose
 
 ### Core Infrastructure
 
-- **`provider.tf`**: Configures the required Terraform providers (Civo, Kubernetes, Helm, GitHub, kubectl, Cloudflare, time, etc.)
-- **`io.tf`**: Defines all input and output variables used throughout the Terraform configuration
-- **`cluster.tf`**: Creates the Civo Kubernetes cluster and saves the kubeconfig locally
+- **`provider.tf`**: Configures Terraform providers for Civo, Kubernetes, Helm, GitHub, kubectl, Cloudflare, and Time.
+- **`io.tf`**: Defines all input/output variables used throughout the Terraform configuration.
+- **`cluster.tf`**: Creates the Civo Kubernetes cluster and writes the kubeconfig.
+- **`cluster_ready_delay.tf`**: Adds a delay to ensure the API server is ready before provisioning other resources.
+- **`kubectl_dependencies.tf`**: Configures the kubectl provider to wait for cluster readiness.
 
-### Firewall Configuration
+### Networking (Cilium)
 
-- **`civo_firewall-cluster.tf`**: Defines the firewall for the Kubernetes API server (port 6443)
-- **`civo_firewall-ingress.tf`**: Defines the firewall for HTTP/HTTPS ingress traffic (ports 80/443)
-- **`firewall_destroy_delay.tf`**: Implements a 60-second delay before firewall destruction to prevent dependency conflicts during `terraform destroy`
+- **`helm_cilium.tf`**: Installs/upgrades Cilium CNI via Helm with Hubble observability.
+- **`cilium_values.yaml`**: Custom configuration values for Cilium and Hubble.
 
-### Ingress and DNS
+### Firewall Rules
 
-- **`helm_traefik.tf`**: Installs Traefik ingress controller via Helm
-- **`cloudflare_dns.tf`**: Creates DNS records in Cloudflare pointing to the Traefik load balancer
+- **`civo_firewall-cluster.tf`**: Firewall for the Kubernetes API server (port 6443).
+- **`civo_firewall-ingress.tf`**: Firewall for HTTP/HTTPS ingress traffic (ports 80/443).
+
+### Ingress & DNS
+
+- **`kgateway_api.tf`**: Installs Gateway API CRDs, Kgateway CRDs, and Kgateway release via Helm; defines the default Gateway and its TLS Certificate.
+- **`cloudflare_dns.tf`**: Creates A records (root and wildcard) in Cloudflare pointing to the Gateway load balancer.
+- **`kubernetes_ingress-argocd.tf`**: Configures HTTPRoute for Argo CD via Gateway API.
 
 ### TLS Certificate Management
 
-- **`helm_cert_manager.tf`**: Installs cert-manager via Helm for automated TLS certificate management
-- **`kubernetes_cert_manager.tf`**: Configures cert-manager ClusterIssuers for Let's Encrypt staging and production environments, and creates a Kubernetes secret for Cloudflare API token
+- **`helm_cert_manager.tf`**: Installs cert-manager via Helm for automated certificate management.
+- **`kubernetes_cert_manager.tf`**: Defines staging and production ClusterIssuers and the Cloudflare API token secret.
 
-### Argo CD and GitOps
+### GitOps & Argo CD
 
-- **`helm_argocd.tf`**: Installs Argo CD via Helm with proper configuration for TLS termination
-- **`kubernetes_ingress-argocd.tf`**: Creates an ingress resource for Argo CD with TLS configuration
-- **`argocd_applications.tf`**: Defines the root Argo CD application using the kubectl provider to avoid CRD race conditions
-- **`github.tf`**: Creates and populates a GitHub repository with Kubernetes manifests for applications
+- **`helm_argocd.tf`**: Installs Argo CD via Helm with TLS configuration.
+- **`argocd_applications.tf`**: Defines the root Argo CD Application using the App-of-Apps pattern.
+- **`github.tf`**: Creates the GitHub repository and application manifest files for Argo CD.
 
-### Additional Resources
+### Utility & Examples
 
-- **`kubernetes_secret_object_store.tf`**: Template for creating Kubernetes secrets (if needed)
-- **`civo_object_store-template.tf`**: Template for Civo object store configuration (if needed)
-- **`outputs.tf`**: Defines useful outputs like Argo CD URL and admin password retrieval instructions
+- **`terraform.tfvars.example`**: Sample variables file.
+- **`outputs.tf`**: Defines outputs like Argo CD URL and password retrieval instructions.
 
 ## Deployment Process
 
@@ -106,9 +112,18 @@ To destroy the infrastructure:
 terraform destroy
 ```
 
-Note: The destruction process includes a 60-second delay before removing firewalls to ensure proper cleanup of dependent resources.
+Note: The destruction process often fails with a firewall timeout error because the load balancer isn't completely destroyed and needs to be before the firewall can be removed.  The firewall is the last component to be destroyed.  If the terraform fails to completely destroy because of this, wait a few minutes and run terraform destroy again and it will clean up the remaining resources.
 
 ## GitOps Workflow with Argo CD
+
+Terraform automatically provisions and bootstraps a GitOps repository and a sample nginx application:
+
+- A GitHub repository named `${var.github_repo_name}` is created containing:
+  - `apps/nginx.yaml`: An Argo CD Application manifest referencing the `nginx-manifests` directory
+  - `nginx-manifests/nginx.yaml`: Defines a Deployment, Service, and HTTPRoute for nginx
+
+The root Argo CD Application (`root-app`) deployed via `argocd_applications.tf` syncs the `apps` directory, which includes `nginx.yaml`. This deploys the sample nginx app accessible at `test-nginx.${var.domain_name}`.
+
 
 ### App of Apps Pattern
 
@@ -138,36 +153,14 @@ The solution includes automatic TLS certificate issuance and renewal:
 4. Ingress resources are annotated to request certificates automatically
 5. Certificates are stored as Kubernetes secrets and used by Traefik for TLS termination
 
-## Troubleshooting
-
-### Argo CD Redirect Loops
-
-If you encounter redirect loops with Argo CD:
-
-1. Verify that the Argo CD server is configured with the `--insecure` flag
-2. Check that the `configs.cm.url` is set to the correct public URL
-3. Ensure the ingress is properly configured with TLS
-
-### Certificate Issuance Issues
-
-If certificates are not being issued:
-
-1. Check the cert-manager logs: `kubectl logs -n cert-manager -l app=cert-manager`
-2. Verify the Cloudflare API token has the correct permissions
-3. Check Certificate resources: `kubectl get certificates -A`
-4. Check for Let's Encrypt rate limits (5 certificates per domain per week)
-5. Use test subdomains to avoid hitting rate limits during development and testing
-6. Monitor certificate status: `kubectl get challenges,orders,certificates -A`
-
 ## Important Notes
 
-1. The deployment is configured to use Let's Encrypt production environment by default
-2. Both staging and production ClusterIssuers are created, but the ingress resources are configured to use the production issuer
+1. Both staging and production ClusterIssuers are created (`letsencrypt-staging` and `letsencrypt-prod`).
+2. The default Gateway certificate is first requested via the staging issuer for initial validation and then reissued via the production issuer once DNS is live.
 3. Test subdomains (e.g., `test-argocd.yourdomain.com`, `test-nginx.yourdomain.com`) are used to avoid Let's Encrypt rate limits
-4. Argo CD admin password is randomly generated; retrieve it using the provided command
-5. The repository includes a controlled destroy process with delays to avoid Terraform dependency issues
-6. Custom Resource Definitions (CRDs) from Helm charts may remain after `terraform destroy`
-7. A wildcard DNS record is configured in Cloudflare to support all subdomains
+4. Argo CD admin password is randomly generated; retrieve it using the provided command or  you can obtain it from the terraform apply output.
+5. Custom Resource Definitions (CRDs) from Helm charts may remain after `terraform destroy`
+6. A wildcard DNS record is configured in Cloudflare to support all subdomains
 
 ## Security Considerations
 
