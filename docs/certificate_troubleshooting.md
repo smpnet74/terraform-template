@@ -145,3 +145,12 @@ Certificates are valid for 90 days and should be renewed automatically by cert-m
 *   [cert-manager Documentation](https://cert-manager.io/docs/)
 *   [Let's Encrypt Documentation](https://letsencrypt.org/docs/)
 *   [Traefik Documentation](https://doc.traefik.io/traefik/)
+
+
+You can think of an “AI Gateway” as a specialization of your north-south routing layer (#2), but kept completely orthogonal to your other concerns. In practice you’d end up with something like:
+
+Application building-blocks (Dapr)
+General ingress/gateway (Gateway API ↔ web traffic)
+AI Gateway (Gateway API ↔ LLM traffic)
+Service mesh (Ambient Mesh ↔ east-west mTLS, retries, telemetry)
+CNI / NetworkPolicy (Calico/Cilium ↔ L3/L4 pod networking & isolation)

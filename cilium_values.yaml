@@ -1,0 +1,13 @@
+image:
+  repository: quay.io/cilium/cilium
+  tag: v1.17.5
+installCRDs: true
+kubeProxyReplacement: true
+hubble:
+  enabled: true
+  relay:
+    enabled: true
+  ui:
+    enabled: true
+metrics:
+  enabled: true
