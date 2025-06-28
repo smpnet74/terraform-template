@@ -26,7 +26,7 @@ This solution implements a complete GitOps workflow with the following component
 
 ### Networking (Cilium)
 
-- **`helm_cilium.tf`**: Installs/upgrades Cilium CNI via Helm with Hubble observability.
+- **`helm_cilium.tf`**: Installs/upgrades Cilium CNI via Helm with Hubble observability. See [Helm Cilium Installation & Config](docs/helm_cilium.md).
 - **`cilium_values.yaml`**: Custom configuration values for Cilium and Hubble.
 
 ### Firewall Rules
@@ -36,13 +36,14 @@ This solution implements a complete GitOps workflow with the following component
 
 ### Ingress & DNS
 
-- **`kgateway_api.tf`**: Installs Gateway API CRDs, Kgateway CRDs, and Kgateway release via Helm; defines the default Gateway and its TLS Certificate.
+- **`kgateway_api.tf`**: Installs Gateway API CRDs, Kgateway CRDs, and Kgateway release via Helm; defines the default Gateway and its TLS Certificate. See [kgateway API Reference](docs/kgateway_api.md).
 - **`cloudflare_dns.tf`**: Creates A records (root and wildcard) in Cloudflare pointing to the Gateway load balancer.
 - **`kubernetes_ingress-argocd.tf`**: Configures HTTPRoute for Argo CD via Gateway API.
+- For troubleshooting Kgateway, see [kgateway Troubleshooting](docs/kgateway_troubleshooting.md).
 
 ### TLS Certificate Management
 
-- **`helm_cert_manager.tf`**: Installs cert-manager via Helm for automated certificate management.
+- **`helm_cert_manager.tf`**: Installs cert-manager via Helm for automated certificate management. See [Certificate Troubleshooting](docs/certificate_troubleshooting.md).
 - **`kubernetes_cert_manager.tf`**: Defines staging and production ClusterIssuers and the Cloudflare API token secret.
 
 ### GitOps & Argo CD
@@ -57,6 +58,8 @@ This solution implements a complete GitOps workflow with the following component
 - **`outputs.tf`**: Defines outputs like Argo CD URL and password retrieval instructions.
 
 ## Deployment Process
+
+See [Terraform Execution Order](docs/order_of_execution.md) for detailed resource provisioning sequence.
 
 ### Prerequisites
 

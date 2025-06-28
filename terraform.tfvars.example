@@ -1,1 +1,6 @@
-civo_token = ""
+   civo_token = "your-civo-api-token"
+   github_token = "your-github-personal-access-token"
+   domain_name = "your-domain.com"
+   cloudflare_api_token = "your-cloudflare-api-token"
+   cloudflare_zone_id = "your-cloudflare-zone-id"
+   cloudflare_email = "your-cloudflare-email"
