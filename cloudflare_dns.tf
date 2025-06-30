@@ -37,7 +37,7 @@ resource "cloudflare_dns_record" "root" {
   name    = var.domain_name
   content = local.gateway_lb_ip
   type    = "A"
-  proxied = false
+  proxied = true  # Enable Cloudflare proxying
   ttl     = 1 # Automatic
   depends_on = [time_sleep.wait_for_gateway_lb]
   
@@ -54,7 +54,7 @@ resource "cloudflare_dns_record" "wildcard" {
   name    = "*"
   content = local.gateway_lb_ip  # Point directly to Gateway IP
   type    = "A"                 # Change to A record
-  proxied = false
+  proxied = true  # Enable Cloudflare proxying
   ttl     = 1 # Automatic
   depends_on = [time_sleep.wait_for_gateway_lb]
   
