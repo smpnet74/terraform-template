@@ -25,7 +25,7 @@ resource "helm_release" "argocd" {
 
     configs:
       cm:
-        url: https://argocd.${var.domain_name}
+        url: https://test-argocd.${var.domain_name}
     EOF
   ]
 

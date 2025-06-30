@@ -1,22 +1,24 @@
-resource "kubectl_manifest" "gateway_certificate" {
-  yaml_body = <<-YAML
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: default-gateway-cert
-  namespace: default
-spec:
-  secretName: default-gateway-cert
-  issuerRef:
-    name: letsencrypt-prod
-    kind: ClusterIssuer
-  dnsNames:
-  - "*.${var.domain_name}"
-  YAML
+# Cloudflare Origin Certificate Configuration
+
+# Create Kubernetes secret for Cloudflare Origin Certificate using local files
+resource "kubernetes_secret" "cloudflare_origin_cert" {
+  metadata {
+    name      = "default-gateway-cert"
+    namespace = "default"
+  }
+
+  type = "kubernetes.io/tls"
+
+  data = {
+    "tls.crt" = file("${path.module}/certs/tls.crt")
+    "tls.key" = file("${path.module}/certs/tls.key")
+  }
 
   depends_on = [
-    kubectl_manifest.letsencrypt_prod_issuer,
-    helm_release.cert_manager,
-    cloudflare_dns_record.wildcard
+    civo_kubernetes_cluster.cluster,
+    time_sleep.wait_for_cluster
   ]
 }
+
+# Note: We're no longer using cert-manager for certificates
+# Instead, we're using Cloudflare Origin Certificates directly as a Kubernetes secret

@@ -98,29 +98,11 @@ spec:
   YAML
 
   depends_on = [
-    helm_release.kgateway
+    helm_release.kgateway,
+    kubernetes_secret.cloudflare_origin_cert
   ]
 }
 
-# Create a default certificate for the Gateway using cert-manager
-resource "kubectl_manifest" "default_gateway_cert" {
-  yaml_body = <<-YAML
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: default-gateway-cert
-  namespace: default
-spec:
-  secretName: default-gateway-cert
-  issuerRef:
-    name: letsencrypt-staging
-    kind: ClusterIssuer
-  dnsNames:
-  - "*.${var.domain_name}"
-  - "${var.domain_name}"
-  YAML
-
-  depends_on = [
-    kubectl_manifest.letsencrypt_issuer
-  ]
-}
+# Note: We're no longer using cert-manager for certificates
+# Instead, we're using Cloudflare Origin Certificates directly as a Kubernetes secret
+# The secret is created in kgateway_certificate.tf

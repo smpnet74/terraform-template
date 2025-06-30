@@ -8,7 +8,10 @@ data "kubernetes_service" "gateway_lb" {
     name      = "default-gateway"
     namespace = "default"
   }
-  depends_on = [kubectl_manifest.default_gateway]
+  depends_on = [
+    kubectl_manifest.default_gateway,
+    time_sleep.wait_for_gateway_lb # Wait for the load balancer to be fully provisioned
+  ]
 }
 
 # Use a local value to safely handle the IP address with a fallback
@@ -16,14 +19,17 @@ locals {
   # Check if the gateway service has a load balancer IP assigned
   gateway_lb_ip = try(
     data.kubernetes_service.gateway_lb.status[0].load_balancer[0].ingress[0].ip,
-    "192.0.2.1" # Fallback to a placeholder IP (TEST-NET-1 from RFC 5737)
+    try(data.kubernetes_service.gateway_lb.status[0].load_balancer[0].ingress[0].hostname, "")
   )
+  
+  # Validate that we have a valid IP address
+  has_valid_ip = length(local.gateway_lb_ip) > 0 && local.gateway_lb_ip != "192.0.2.1"
 }
 
-# Add a delay to ensure the Gateway service is fully ready
+# Add a delay to ensure the Gateway service is fully ready and has an assigned IP
 resource "time_sleep" "wait_for_gateway_lb" {
   depends_on = [kubectl_manifest.default_gateway]
-  create_duration = "30s"
+  create_duration = "120s" # Increased wait time to ensure IP assignment
 }
 
 resource "cloudflare_dns_record" "root" {
@@ -34,6 +40,13 @@ resource "cloudflare_dns_record" "root" {
   proxied = false
   ttl     = 1 # Automatic
   depends_on = [time_sleep.wait_for_gateway_lb]
+  
+  lifecycle {
+    precondition {
+      condition     = local.has_valid_ip
+      error_message = "Gateway load balancer IP address is not available yet. Please run terraform apply again after the load balancer IP is assigned."
+    }
+  }
 }
 
 resource "cloudflare_dns_record" "wildcard" {
@@ -44,4 +57,11 @@ resource "cloudflare_dns_record" "wildcard" {
   proxied = false
   ttl     = 1 # Automatic
   depends_on = [time_sleep.wait_for_gateway_lb]
+  
+  lifecycle {
+    precondition {
+      condition     = local.has_valid_ip
+      error_message = "Gateway load balancer IP address is not available yet. Please run terraform apply again after the load balancer IP is assigned."
+    }
+  }
 }

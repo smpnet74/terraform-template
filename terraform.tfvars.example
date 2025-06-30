@@ -4,3 +4,5 @@
    cloudflare_api_token = "your-cloudflare-api-token"
    cloudflare_zone_id = "your-cloudflare-zone-id"
    cloudflare_email = "your-cloudflare-email"
+   cluster_node_size = "g4s.kube.small"
+   region = "NYC1"

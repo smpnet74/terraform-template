@@ -32,3 +32,9 @@ override.tf.json
 
 # kubeconfig file for the cluster
 kubeconfig
+
+# Certificate files
+certs/
+*.crt
+*.key
+*.pem

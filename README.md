@@ -1,4 +1,4 @@
-# Kubernetes GitOps Deployment with Terraform *
+# Prescriptive GENAI Development and Deployment K8 Cluster on Civo
 
 This repository provides a Terraform-based solution to deploy and manage a Civo Kubernetes cluster with GitOps via Argo CD. It leverages Cilium CNI with Hubble for networking and observability, cert-manager for automated TLS (Let's Encrypt via Cloudflare DNS-01), Gateway API & Kgateway for ingress, and a GitHub repository hosting application manifests using the App-of-Apps pattern.
 
@@ -11,7 +11,7 @@ This solution implements a complete GitOps workflow with the following component
 3. **Gateway API & Kgateway**: Implements modern HTTP/HTTPS ingress
 4. **cert-manager**: Automates TLS certificate issuance/renewal (Let's Encrypt via Cloudflare DNS-01)
 5. **Argo CD**: GitOps continuous delivery tool syncing application manifests
-6. **GitHub Repository**: Hosts application manifests using the App-of-Apps pattern
+6. **Terraform deployed Gitops GitHub Repository**: Hosts application manifests using the App-of-Apps pattern
 7. **Cloudflare DNS**: Manages DNS A records and ACME challenge validation
 
 ## File Structure and Purpose

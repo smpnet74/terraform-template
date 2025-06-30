@@ -21,12 +21,12 @@ spec:
     backendRefs:
     - name: argocd-server
       port: 80
+      kind: Service
   YAML
 
   depends_on = [
     helm_release.argocd,
     kubectl_manifest.default_gateway,
-    kubectl_manifest.letsencrypt_issuer,
-    kubectl_manifest.default_gateway_cert
+    kubernetes_secret.cloudflare_origin_cert
   ]
 }
