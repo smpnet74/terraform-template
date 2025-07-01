@@ -6,7 +6,7 @@ This document provides a comprehensive list of all components and their versions
 
 | Component | Version | Description |
 |-----------|---------|-------------|
-| Kubernetes | v1.28.7+k3s1 | Base Kubernetes cluster running on Civo Cloud |
+| Kubernetes | 1.30.5-k3s1 | Base Kubernetes cluster running on Civo Cloud |
 | Terraform | N/A | Infrastructure as Code tool used to manage all resources |
 
 ## Networking Stack
@@ -16,15 +16,15 @@ This document provides a comprehensive list of all components and their versions
 | Cilium CNI | v1.17.5 | Container Network Interface providing networking and network policy |
 | Hubble | v1.17.5 | Observability layer for Cilium providing network flow visibility |
 | Gateway API | v1.2.1 | Kubernetes Gateway API CRDs for modern ingress management |
-| Kgateway | v2.0.2 | Gateway API implementation for ingress traffic |
+| Kgateway | v2.0.3 | Gateway API implementation for ingress traffic |
 
 ## Security & Certificate Management
 
 | Component | Version | Description |
 |-----------|---------|-------------|
-| cert-manager | v1.15.1 | Certificate management controller for Kubernetes |
-| Let's Encrypt | N/A | Certificate Authority used for TLS certificates |
-| Cloudflare DNS | N/A | DNS provider used for DNS01 challenge validation |
+| Cloudflare Origin Certificates | N/A | TLS certificates provided by Cloudflare for secure connections |
+| Cloudflare DNS | N/A | DNS provider with proxying enabled for additional security |
+| Cloudflare SSL/TLS | Full | Encryption mode used between Cloudflare and origin server |
 
 ## GitOps & Continuous Delivery
 

@@ -27,7 +27,7 @@ resource "helm_release" "kgateway_crds" {
   name             = "kgateway-crds"
   repository       = "" # Using OCI registry instead of traditional Helm repo
   chart            = "oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds"
-  version          = "v2.0.2"  # Latest stable release as per docs
+  version          = "v2.0.3"  # Latest stable release as per docs
   namespace        = "kgateway-system"
   create_namespace = true
   atomic           = true
@@ -51,7 +51,7 @@ resource "helm_release" "kgateway" {
   name             = "kgateway"
   repository       = "" # Using OCI registry instead of traditional Helm repo
   chart            = "oci://cr.kgateway.dev/kgateway-dev/charts/kgateway"
-  version          = "v2.0.2"  # Latest stable release as per docs
+  version          = "v2.0.3"  # Updated to latest stable release
   namespace        = "kgateway-system"
   create_namespace = true
   atomic           = false  # Set to false to prevent rollback on timeout
@@ -61,8 +61,7 @@ resource "helm_release" "kgateway" {
 
   depends_on = [
     helm_release.kgateway_crds,
-    time_sleep.wait_for_kgateway_crds,
-    helm_release.cert_manager  # Ensure cert-manager is deployed first
+    time_sleep.wait_for_kgateway_crds
   ]
 }
 

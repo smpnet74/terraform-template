@@ -8,11 +8,10 @@ The Terraform project deploys a complete Kubernetes infrastructure with the foll
 
 1. Civo Kubernetes Cluster with Cilium CNI
 2. Cilium CNI configuration and upgrade
-3. cert-manager for certificate management
-4. Gateway API CRDs and Kgateway implementation
-5. DNS configuration with Cloudflare
-6. TLS certificates via Let's Encrypt
-7. ArgoCD for GitOps
+3. Gateway API CRDs and Kgateway implementation
+4. Cloudflare Origin Certificates for TLS
+5. DNS configuration with Cloudflare (proxied)
+6. ArgoCD for GitOps
 
 ## 1. Cluster Creation and Initial Setup
 
@@ -130,151 +129,38 @@ resource "null_resource" "cilium_upgrade" {
 
 This upgrades the Cilium CNI with specific configuration values. It depends on the cluster creation through the explicit `depends_on` attribute.
 
-## 2. Certificate Management
+## 2. TLS Certificate Management
 
-### 2.1. cert-manager Namespace
+### 2.1. Cloudflare Origin Certificate
 
-**File:** `helm_cert_manager.tf`
+**File:** `kgateway_certificate.tf`
 
 ```hcl
-resource "kubernetes_namespace" "cert_manager" {
+resource "kubernetes_secret" "cloudflare_origin_cert" {
   metadata {
-    name = "cert-manager"
-  }
-}
-```
-
-Creates the namespace for cert-manager. No explicit dependencies.
-
-### 2.2. cert-manager Helm Release
-
-**File:** `helm_cert_manager.tf`
-
-```hcl
-resource "helm_release" "cert_manager" {
-  name       = "cert-manager"
-  repository = "https://charts.jetstack.io"
-  chart      = "cert-manager"
-  namespace  = kubernetes_namespace.cert_manager.metadata[0].name
-  version    = "v1.15.1"
-  
-  # Add timeout to prevent indefinite waiting
-  timeout = 900  # 15 minutes
-  
-  # Set atomic to false to prevent rollback on timeout
-  atomic = false
-
-  set {
-    name  = "installCRDs"
-    value = "true"
+    name      = "default-gateway-cert"
+    namespace = "default"
   }
 
-  depends_on = [
-    kubernetes_namespace.cert_manager,
-    null_resource.cilium_upgrade,  # Ensure Cilium is fully deployed first
-    time_sleep.wait_for_cluster    # Ensure cluster is ready
-  ]
-}
-```
-
-This deploys cert-manager using Helm. It depends on:
-- The cert-manager namespace
-- Cilium upgrade completion
-- Cluster readiness
-
-### 2.3. Cloudflare API Token Secret
-
-**File:** `kubernetes_cert_manager.tf`
-
-```hcl
-resource "kubernetes_secret" "cloudflare_api_token_secret" {
-  metadata {
-    name      = "cloudflare-api-token-secret"
-    namespace = kubernetes_namespace.cert_manager.metadata[0].name
-  }
+  type = "kubernetes.io/tls"
 
   data = {
-    "api-token" = var.cloudflare_api_token
+    "tls.crt" = file("${path.module}/certs/tls.crt")
+    "tls.key" = file("${path.module}/certs/tls.key")
   }
 
-  type = "Opaque"
-
   depends_on = [
-    helm_release.cert_manager,
+    civo_kubernetes_cluster.cluster,
     time_sleep.wait_for_cluster
   ]
 }
 ```
 
-Creates a Kubernetes secret with the Cloudflare API token for DNS validation. Depends on cert-manager deployment.
+This creates a Kubernetes TLS secret containing the Cloudflare Origin Certificate. The certificate files (`tls.crt` and `tls.key`) are stored locally in the `/certs` directory and are not committed to Git. This certificate is used by the Gateway for TLS termination.
 
-### 2.4. Let's Encrypt Staging Issuer
-
-**File:** `kubernetes_cert_manager.tf`
-
-```hcl
-resource "kubectl_manifest" "letsencrypt_issuer" {
-  yaml_body = <<-EOF
-  apiVersion: cert-manager.io/v1
-  kind: ClusterIssuer
-  metadata:
-    name: letsencrypt-staging
-  spec:
-    acme:
-      server: https://acme-staging-v02.api.letsencrypt.org/directory
-      email: ${var.cloudflare_email}
-      privateKeySecretRef:
-        name: letsencrypt-staging
-      solvers:
-      - dns01:
-          cloudflare:
-            email: ${var.cloudflare_email}
-            apiTokenSecretRef:
-              name: ${kubernetes_secret.cloudflare_api_token_secret.metadata[0].name}
-              key: api-token
-  EOF
-
-  depends_on = [
-    kubernetes_secret.cloudflare_api_token_secret,
-  ]
-}
-```
-
-Creates a ClusterIssuer for Let's Encrypt staging environment. Depends on the Cloudflare API token secret.
-
-### 2.5. Let's Encrypt Production Issuer
-
-**File:** `kubernetes_cert_manager.tf`
-
-```hcl
-resource "kubectl_manifest" "letsencrypt_prod_issuer" {
-  yaml_body = <<-EOF
-  apiVersion: cert-manager.io/v1
-  kind: ClusterIssuer
-  metadata:
-    name: letsencrypt-prod
-  spec:
-    acme:
-      server: https://acme-v02.api.letsencrypt.org/directory
-      email: ${var.cloudflare_email}
-      privateKeySecretRef:
-        name: letsencrypt-prod
-      solvers:
-      - dns01:
-          cloudflare:
-            email: ${var.cloudflare_email}
-            apiTokenSecretRef:
-              name: ${kubernetes_secret.cloudflare_api_token_secret.metadata[0].name}
-              key: api-token
-  EOF
-
-  depends_on = [
-    kubernetes_secret.cloudflare_api_token_secret,
-  ]
-}
-```
-
-Creates a ClusterIssuer for Let's Encrypt production environment. Depends on the Cloudflare API token secret.
+The secret depends on:
+- Cluster creation
+- Cluster readiness
 
 ## 3. Gateway API and Kgateway
 
@@ -364,7 +250,7 @@ resource "helm_release" "kgateway" {
   name             = "kgateway"
   repository       = "" # Using OCI registry instead of traditional Helm repo
   chart            = "oci://cr.kgateway.dev/kgateway-dev/charts/kgateway"
-  version          = "v2.0.2"  # Latest stable release as per docs
+  version          = "v2.0.3"  # Updated to latest stable release
   namespace        = "kgateway-system"
   create_namespace = true
   atomic           = false  # Set to false to prevent rollback on timeout
@@ -374,8 +260,7 @@ resource "helm_release" "kgateway" {
 
   depends_on = [
     helm_release.kgateway_crds,
-    time_sleep.wait_for_kgateway_crds,
-    helm_release.cert_manager  # Ensure cert-manager is deployed first
+    time_sleep.wait_for_kgateway_crds
   ]
 }
 ```
@@ -504,39 +389,38 @@ resource "cloudflare_dns_record" "wildcard" {
 
 Creates a wildcard A record for all subdomains pointing to the Gateway IP. Depends on the wait period after Gateway creation.
 
-### 4.5. Gateway Certificate
+### 4.5. Cloudflare DNS Proxy Configuration
 
-**File:** `kgateway_certificate.tf`
+**File:** `cloudflare_dns.tf`
 
 ```hcl
-resource "kubectl_manifest" "gateway_certificate" {
-  yaml_body = <<-YAML
-  apiVersion: cert-manager.io/v1
-  kind: Certificate
-  metadata:
-    name: default-gateway-cert
-    namespace: default
-  spec:
-    secretName: default-gateway-cert
-    issuerRef:
-      name: letsencrypt-prod
-      kind: ClusterIssuer
-    dnsNames:
-    - "*.${var.domain_name}"
-  YAML
+resource "cloudflare_record" "root" {
+  zone_id = var.cloudflare_zone_id
+  name    = var.domain_name
+  content = local.gateway_lb_ip
+  type    = "A"
+  proxied = true  # Enable Cloudflare proxy (orange cloud)
+  ttl     = 1     # Automatic
+  depends_on = [time_sleep.wait_for_gateway_lb]
+}
 
-  depends_on = [
-    kubectl_manifest.letsencrypt_prod_issuer,
-    helm_release.cert_manager,
-    cloudflare_dns_record.wildcard
-  ]
+resource "cloudflare_record" "wildcard" {
+  zone_id = var.cloudflare_zone_id
+  name    = "*"
+  content = local.gateway_lb_ip
+  type    = "A"
+  proxied = true  # Enable Cloudflare proxy (orange cloud)
+  ttl     = 1     # Automatic
+  depends_on = [time_sleep.wait_for_gateway_lb]
 }
 ```
 
-Creates a wildcard certificate for the Gateway using cert-manager. Depends on:
-- Let's Encrypt production issuer
-- cert-manager deployment
-- Wildcard DNS record
+Configures Cloudflare DNS records with proxying enabled (orange cloud). This provides:
+- DDoS protection
+- TLS termination at Cloudflare edge
+- Connection to the cluster using Cloudflare Origin Certificate
+
+The Cloudflare SSL/TLS settings should be configured to use "Full" mode to ensure encrypted traffic between Cloudflare and the cluster.
 
 ## 5. ArgoCD Deployment
 
@@ -586,8 +470,7 @@ resource "helm_release" "argocd" {
 
   depends_on = [
     kubernetes_namespace.argocd,
-    helm_release.kgateway,  # Ensure Kgateway is deployed first
-    helm_release.cert_manager  # Ensure cert-manager is deployed first
+    helm_release.kgateway  # Ensure Kgateway is deployed first
   ]
 }
 ```
@@ -629,8 +512,7 @@ resource "kubectl_manifest" "argocd_httproute" {
   depends_on = [
     helm_release.argocd,
     kubectl_manifest.default_gateway,
-    kubectl_manifest.letsencrypt_issuer,
-    kubectl_manifest.default_gateway_cert
+    kubernetes_secret.cloudflare_origin_cert
   ]
 }
 ```
@@ -647,33 +529,29 @@ The complete execution order of the Terraform components is as follows:
 
 1. **Cluster Infrastructure**
    - Civo Firewall
-   - Civo Kubernetes Cluster
+   - Civo Kubernetes Cluster (version 1.30.5-k3s1)
    - Kubeconfig Generation
    - Wait for Cluster Readiness (60s)
 
 2. **Networking Layer**
-   - Cilium CNI Upgrade
+   - Cilium CNI Upgrade (version 1.17.5 with cni.exclusive: false for Ambient Mesh compatibility)
 
-3. **Certificate Management**
-   - cert-manager Namespace
-   - cert-manager Helm Release
-   - Cloudflare API Token Secret
-   - Let's Encrypt Staging Issuer
-   - Let's Encrypt Production Issuer
+3. **TLS Certificate Management**
+   - Cloudflare Origin Certificate Secret
 
 4. **Gateway API and Kgateway**
-   - Gateway API CRDs
+   - Gateway API CRDs (v1.2.1)
    - Wait for Gateway API CRDs (30s)
-   - Kgateway CRDs
+   - Kgateway CRDs (v2.0.3)
    - Wait for Kgateway CRDs (30s)
-   - Kgateway Helm Release
-   - Default Gateway Resource
+   - Kgateway Helm Release (v2.0.3)
+   - Default Gateway Resource (using Cloudflare Origin Certificate)
    - Wait for Gateway Load Balancer (30s)
 
 5. **DNS and Certificate Configuration**
-   - Root Domain DNS Record
-   - Wildcard DNS Record
-   - Gateway Certificate
+   - Root Domain DNS Record (proxied through Cloudflare)
+   - Wildcard DNS Record (proxied through Cloudflare)
+   - Cloudflare SSL/TLS settings (Full mode)
 
 6. **GitOps Platform**
    - ArgoCD Namespace
@@ -685,13 +563,22 @@ The complete execution order of the Terraform components is as follows:
 This execution order establishes the foundation for the architecture evolution goals:
 
 1. **Current Implementation**
-   - Cilium CNI for networking and network policies
-   - Gateway API with Kgateway for general ingress/web traffic
+   - Kubernetes 1.30.5-k3s1 for modern Kubernetes features
+   - Cilium CNI 1.17.5 for networking and network policies (with cni.exclusive: false for Ambient Mesh compatibility)
+   - Gateway API v1.2.1 with Kgateway v2.0.3 for general ingress/web traffic
+   - Cloudflare Origin Certificates for TLS termination
+   - Cloudflare proxying for DDoS protection and edge TLS
    - ArgoCD for GitOps-based application deployment
 
-2. **Future Components** (not yet implemented)
+2. **Future Components** (prepared for implementation)
    - Dapr for application building-blocks
-   - Specialized AI Gateway for LLM traffic
-   - Ambient Mesh for east-west mTLS, retries, and telemetry
+   - Specialized AI Gateway for LLM traffic (using Gateway API)
+   - Istio Ambient Mesh for east-west mTLS, retries, and telemetry with the following configuration:
+     - Istio CNI node agent with chained plugin alongside Cilium
+     - cni.chained=true to work alongside Cilium
+     - cni.ambient=true to enable Ambient Mesh support
+     - ambient.redirectMode=ebpf for ztunnel
+     - Installation order: istio-base → istio-cni → istiod → ztunnel
+     - PILOT_ENABLE_AMBIENT=true environment variable for istiod
 
-The current implementation provides a solid foundation with proper sequencing and dependency management for the future evolution of the architecture.
+The current implementation provides a solid foundation with proper sequencing and dependency management for the future evolution of the architecture. The Kubernetes version and Cilium configuration have been specifically prepared to ensure compatibility with Istio Ambient Mesh.
