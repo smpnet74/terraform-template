@@ -20,6 +20,8 @@ image:
   tag: v1.17.5
 installCRDs: true
 kubeProxyReplacement: true
+cni:
+  exclusive: false
 hubble:
   enabled: true
   relay:
