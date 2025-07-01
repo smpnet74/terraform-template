@@ -23,3 +23,23 @@ output "ambient_mesh_pods_command" {
   value = "kubectl get pods -n istio-system"
   description = "Command to check the status of the Istio pods"
 }
+
+output "kiali_access" {
+  value = "kubectl port-forward svc/kiali -n istio-system 20001:20001"
+  description = "Command to access the Kiali dashboard (then open http://localhost:20001 in your browser)"
+}
+
+output "kiali_url" {
+  value = "https://kiali.${var.domain_name}"
+  description = "URL to access Kiali through the Gateway API"
+}
+
+output "grafana_url" {
+  value = "https://grafana.${var.domain_name}"
+  description = "URL to access Grafana dashboards through the Gateway API"
+}
+
+output "grafana_credentials" {
+  value = "Username: admin, Password: admin"
+  description = "Default credentials for Grafana (change these in production)"
+}

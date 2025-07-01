@@ -70,6 +70,17 @@ resource "kubectl_manifest" "service_mesh_controller" {
         meshConfig:
           defaultConfig:
             interceptionMode: NONE
+        # Telemetry addons
+        prometheus:
+          enabled: true
+          service:
+            annotations: {}
+        kiali:
+          enabled: true
+          dashboard:
+            auth:
+              strategy: anonymous
+          prometheusAddr: http://prometheus.istio-system:9090
   EOF
 
   depends_on = [
@@ -83,4 +94,5 @@ resource "time_sleep" "wait_for_service_mesh_controller" {
   depends_on = [kubectl_manifest.service_mesh_controller]
   create_duration = "120s"  # Allow more time for Istio components to be deployed
 }
+
 
