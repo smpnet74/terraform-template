@@ -11,7 +11,8 @@ The Terraform project deploys a complete Kubernetes infrastructure with the foll
 3. Gateway API CRDs and Kgateway implementation
 4. Cloudflare Origin Certificates for TLS
 5. DNS configuration with Cloudflare (proxied)
-6. ArgoCD for GitOps
+6. Gloo Operator and Ambient Mesh installation
+7. ArgoCD for GitOps
 
 ## 1. Cluster Creation and Initial Setup
 
@@ -422,9 +423,134 @@ Configures Cloudflare DNS records with proxying enabled (orange cloud). This pro
 
 The Cloudflare SSL/TLS settings should be configured to use "Full" mode to ensure encrypted traffic between Cloudflare and the cluster.
 
-## 5. ArgoCD Deployment
+## 5. Gloo Operator and Ambient Mesh Installation
 
-### 5.1. ArgoCD Namespace
+### 5.1. Gloo Operator Namespace
+
+**File:** `helm_gloo_operator.tf`
+
+```hcl
+resource "kubernetes_namespace" "gloo_operator" {
+  metadata {
+    name = "gloo-operator"
+  }
+
+  depends_on = [
+    civo_kubernetes_cluster.cluster,
+    time_sleep.wait_for_cluster
+  ]
+}
+```
+
+Creates the namespace for Gloo Operator. Depends on cluster creation and readiness.
+
+### 5.2. Gloo Operator Helm Release
+
+**File:** `helm_gloo_operator.tf`
+
+```hcl
+resource "helm_release" "gloo_operator" {
+  name       = "gloo-operator"
+  repository = ""  # Using OCI registry
+  chart      = "oci://us-docker.pkg.dev/solo-public/gloo-operator-helm/gloo-operator"
+  namespace  = kubernetes_namespace.gloo_operator.metadata[0].name
+  
+  # Set atomic to false to prevent rollback on timeout
+  atomic = false
+  
+  # Add timeout to prevent indefinite waiting
+  timeout = 900  # 15 minutes
+  
+  depends_on = [
+    kubernetes_namespace.gloo_operator,
+    null_resource.cilium_upgrade  # Ensure Cilium is fully deployed first with cni.exclusive: false
+  ]
+}
+```
+
+Installs the Gloo Operator using Helm. Depends on the Gloo Operator namespace and Cilium upgrade completion.
+
+### 5.3. Wait for Gloo Operator
+
+**File:** `helm_gloo_operator.tf`
+
+```hcl
+resource "time_sleep" "wait_for_gloo_operator" {
+  depends_on = [helm_release.gloo_operator]
+  create_duration = "30s"
+}
+```
+
+Adds a 30-second delay after Gloo Operator installation to ensure it is fully ready.
+
+### 5.4. ServiceMeshController Resource
+
+**File:** `helm_gloo_operator.tf`
+
+```hcl
+resource "kubectl_manifest" "service_mesh_controller" {
+  yaml_body = <<-EOF
+    apiVersion: operator.gloo.solo.io/v1
+    kind: ServiceMeshController
+    metadata:
+      name: managed-istio
+      labels:
+        app.kubernetes.io/name: managed-istio
+    spec:
+      dataplaneMode: Ambient
+      installNamespace: istio-system
+      version: 1.26.2
+      # Additional configuration for Cilium compatibility
+      values:
+        pilot:
+          env:
+            PILOT_ENABLE_AMBIENT: "true"
+        cni:
+          enabled: true
+          chained: true
+          ambient: true
+          cniBinDir: "/opt/cni/bin"
+          cniConfDir: "/etc/cni/net.d"
+        ambient:
+          redirectMode: ebpf
+        meshConfig:
+          defaultConfig:
+            interceptionMode: NONE
+  EOF
+
+  depends_on = [
+    helm_release.gloo_operator,
+    time_sleep.wait_for_gloo_operator
+  ]
+}
+```
+
+Creates a ServiceMeshController resource that instructs the Gloo Operator to install Istio with Ambient Mesh mode. The configuration includes specific settings for compatibility with Cilium CNI:
+
+- `PILOT_ENABLE_AMBIENT: "true"` - Enables Ambient Mesh mode in istiod
+- `cni.chained: true` - Configures Istio CNI as a chained plugin alongside Cilium
+- `cni.ambient: true` - Enables Ambient Mesh support in the CNI
+- `ambient.redirectMode: ebpf` - Uses eBPF for traffic redirection in ztunnel
+- `interceptionMode: NONE` - Uses external CNI instead of Istio's own CNI
+
+Depends on the Gloo Operator installation and the wait period.
+
+### 5.5. Wait for ServiceMeshController
+
+**File:** `helm_gloo_operator.tf`
+
+```hcl
+resource "time_sleep" "wait_for_service_mesh_controller" {
+  depends_on = [kubectl_manifest.service_mesh_controller]
+  create_duration = "120s"  # Allow more time for Istio components to be deployed
+}
+```
+
+Adds a 120-second delay after ServiceMeshController creation to allow time for all Istio components (istio-base, istio-cni, istiod, and ztunnel) to be deployed.
+
+## 6. ArgoCD Deployment
+
+### 6.1. ArgoCD Namespace
 
 **File:** `helm_argocd.tf`
 
@@ -438,7 +564,7 @@ resource "kubernetes_namespace" "argocd" {
 
 Creates the namespace for ArgoCD. No explicit dependencies.
 
-### 5.2. ArgoCD Helm Release
+### 6.2. ArgoCD Helm Release
 
 **File:** `helm_argocd.tf`
 

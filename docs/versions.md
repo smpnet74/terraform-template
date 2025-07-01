@@ -32,6 +32,15 @@ This document provides a comprehensive list of all components and their versions
 |-----------|---------|-------------|
 | ArgoCD | v7.3.8 | Declarative GitOps continuous delivery tool for Kubernetes |
 
+## Service Mesh
+
+| Component | Version | Description |
+|-----------|---------|-------------|
+| Gloo Operator | Latest | Operator for managing Istio lifecycle |
+| Istio | v1.26.2 | Service mesh platform with Ambient Mesh mode |
+| Istio CNI | v1.26.2 | CNI plugin for traffic interception (chained with Cilium) |
+| Ztunnel | v1.26.2 | Ambient data plane proxy for east-west traffic |
+
 ## Architecture Roadmap Components
 
 The following components are part of the architecture evolution roadmap but not yet implemented:
@@ -40,11 +49,15 @@ The following components are part of the architecture evolution roadmap but not 
 |-----------|--------|-------------|
 | Dapr | Planned | Application building-blocks for cloud-native applications |
 | AI Gateway | Planned | Specialized Gateway API implementation for LLM traffic |
-| Ambient Mesh | Planned | Service mesh for east-west mTLS, retries, and telemetry |
 
 ## Notes
 
 - All components are deployed and managed via Terraform
-- Cilium is configured with Hubble for observability
+- Cilium is configured with Hubble for observability and `cni.exclusive: false` for Ambient Mesh compatibility
 - Kgateway is configured with wildcard TLS certificate for all subdomains
 - ArgoCD is configured for GitOps-based application deployment
+- Ambient Mesh is installed via Gloo Operator with specific configuration for Cilium compatibility:
+  - Istio CNI is configured as a chained plugin alongside Cilium
+  - eBPF is used for traffic redirection in ztunnel
+  - PILOT_ENABLE_AMBIENT environment variable is set for istiod
+  - Installation follows the order: istio-base → istio-cni → istiod → ztunnel

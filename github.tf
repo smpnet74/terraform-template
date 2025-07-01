@@ -8,8 +8,6 @@ resource "github_repository" "argocd_apps" {
   visibility  = "public"
 }
 
-# Longhorn application has been removed
-
 resource "github_repository_file" "nginx_app" {
   repository = github_repository.argocd_apps.name
   file       = "apps/nginx.yaml"

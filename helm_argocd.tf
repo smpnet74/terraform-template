@@ -31,6 +31,7 @@ resource "helm_release" "argocd" {
 
   depends_on = [
     kubernetes_namespace.argocd,
-    helm_release.kgateway  # Ensure Kgateway is deployed first
+    helm_release.kgateway,  # Ensure Kgateway is deployed first
+    time_sleep.wait_for_service_mesh_controller  # Ensure Ambient Mesh is deployed first
   ]
 }
