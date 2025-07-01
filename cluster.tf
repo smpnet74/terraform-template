@@ -1,7 +1,8 @@
 resource "civo_kubernetes_cluster" "cluster" {
-  name        = "${var.cluster_name_prefix}cluster"
-  firewall_id = civo_firewall.firewall.id
-  cni         = "cilium"
+  name              = "${var.cluster_name_prefix}cluster"
+  firewall_id       = civo_firewall.firewall.id
+  cni               = "cilium"
+  kubernetes_version = "1.29.8-k3s1"
   pools {
     node_count = var.cluster_node_count
     size       = var.cluster_node_size
