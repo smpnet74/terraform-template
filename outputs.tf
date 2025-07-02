@@ -43,3 +43,13 @@ output "grafana_credentials" {
   value = "Username: admin, Password: admin"
   description = "Default credentials for Grafana (change these in production)"
 }
+
+output "bookinfo_url" {
+  value = "https://bookinfo.${var.domain_name}"
+  description = "URL to access the Bookinfo sample application through KGateway"
+}
+
+output "bookinfo_kiali_view" {
+  value = "Open Kiali and navigate to 'Graph' view, then select 'bookinfo' namespace to visualize the service mesh"
+  description = "Instructions to view Bookinfo application in Kiali for Ambient Mesh visualization"
+}

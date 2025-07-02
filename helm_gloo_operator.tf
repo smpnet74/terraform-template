@@ -66,7 +66,9 @@ resource "kubectl_manifest" "service_mesh_controller" {
           cniConfDir: "/etc/cni/net.d"
           profile: ambient
         ambient:
+          enabled: true
           redirectMode: ebpf
+          installWaypointProxyCRD: true
         meshConfig:
           defaultConfig:
             interceptionMode: NONE
