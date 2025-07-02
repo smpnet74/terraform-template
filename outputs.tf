@@ -51,5 +51,20 @@ output "bookinfo_url" {
 
 output "bookinfo_kiali_view" {
   value = "Open Kiali and navigate to 'Graph' view, then select 'bookinfo' namespace to visualize the service mesh"
-  description = "Instructions to view Bookinfo application in Kiali for Ambient Mesh visualization"
+  description = "Instructions for viewing the Bookinfo application in Kiali"
+}
+
+# KubeBlocks information
+output "kubeblocks_info" {
+  description = "Information about the KubeBlocks installation and available addons"
+  value = <<-EOT
+    KubeBlocks has been installed in the kb-system namespace.
+    
+    To access KubeBlocks:
+    1. Check the status of KubeBlocks: kubectl get pods -n kb-system
+    2. For more information, visit: https://www.kubeblocks.io/docs/preview/user_docs/overview
+    
+    PostgreSQL addon has been installed. You can create instances with:
+    kubectl apply -f scripts/test-postgres.yaml
+  EOT
 }

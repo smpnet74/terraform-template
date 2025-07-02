@@ -23,19 +23,19 @@ resource "null_resource" "kubeblocks_crds" {
   ]
 }
 
-# Wait for CRDs to be established
+# Wait for KubeBlocks CRDs to be ready
 resource "time_sleep" "wait_for_kubeblocks_crds" {
   depends_on = [null_resource.kubeblocks_crds]
   create_duration = "30s"
 }
 
-# Install KubeBlocks using Helm
+# Install KubeBlocks via Helm
 resource "helm_release" "kubeblocks" {
   name       = "kubeblocks"
   repository = "https://apecloud.github.io/helm-charts"
   chart      = "kubeblocks"
-  namespace  = kubernetes_namespace.kb_system.metadata[0].name
-  version    = "v1.0.0"
+  version    = "1.0.0"
+  namespace  = "kb-system"
   
   # Basic configuration
   set {
@@ -82,19 +82,29 @@ resource "helm_release" "kubeblocks" {
   
   depends_on = [
     time_sleep.wait_for_kubeblocks_crds,
-    kubernetes_namespace.kb_system,
-    kubectl_manifest.service_mesh_controller,  # Ensure Ambient Mesh is ready
-    time_sleep.wait_for_service_mesh_controller
+    kubernetes_namespace.kb_system
   ]
 }
 
-# Output KubeBlocks information
-output "kubeblocks_info" {
-  value = <<-EOT
-    KubeBlocks has been installed in the kb-system namespace.
-    
-    To access KubeBlocks:
-    1. Check the status of KubeBlocks: kubectl get pods -n kb-system
-    2. For more information, visit: https://www.kubeblocks.io/docs/preview/user_docs/overview
-  EOT
+# Install PostgreSQL addon for KubeBlocks
+resource "null_resource" "kubeblocks_postgresql_addon" {
+  provisioner "local-exec" {
+    command = "kubectl create -f https://github.com/apecloud/kubeblocks/releases/download/v1.0.0/kubeblocks_addon_postgresql.yaml || true"
+  }
+  
+  depends_on = [
+    helm_release.kubeblocks,
+    time_sleep.wait_for_kubeblocks_crds
+  ]
 }
+
+# Wait for PostgreSQL addon to be ready
+resource "time_sleep" "wait_for_postgresql_addon" {
+  depends_on = [null_resource.kubeblocks_postgresql_addon]
+  create_duration = "30s"
+}
+
+
+
+
+

@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pg-test
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kb-psa-pg-test
+  namespace: pg-test
+---
+apiVersion: apps.kubeblocks.io/v1
+kind: Cluster
+metadata:
+  name: pg-test
+  namespace: pg-test
+spec:
+  clusterDef: postgresql
+  terminationPolicy: WipeOut
+  componentSpecs:
+    - name: postgresql
+      componentDef: postgresql
+      replicas: 1
+      serviceAccountName: kb-psa-pg-test
+      resources:
+        limits:
+          cpu: 200m
+          memory: 256Mi
+        requests:
+          cpu: 100m
+          memory: 256Mi
+      volumeClaimTemplates:
+        - name: data
+          spec:
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: 1Gi

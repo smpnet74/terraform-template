@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rd-test
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kb-psa-rd-test
+  namespace: rd-test
+---
+apiVersion: apps.kubeblocks.io/v1
+kind: Cluster
+metadata:
+  name: rd-test
+  namespace: rd-test
+spec:
+  clusterDef: redis
+  terminationPolicy: WipeOut
+  componentSpecs:
+    - name: redis
+      componentDef: redis
+      replicas: 3
+      serviceAccountName: kb-psa-rd-test
+      resources:
+        limits:
+          cpu: 200m
+          memory: 256Mi
+        requests:
+          cpu: 100m
+          memory: 256Mi
+      volumeClaimTemplates:
+        - name: data
+          spec:
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: 1Gi
