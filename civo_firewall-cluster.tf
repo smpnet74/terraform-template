@@ -11,3 +11,9 @@ resource "civo_firewall" "firewall" {
     action     = "allow"
   }
 }
+
+# Add a wait before firewall destruction to ensure proper cleanup
+resource "time_sleep" "wait_for_firewall" {
+  depends_on = [civo_firewall.firewall]
+  destroy_duration = "240s"
+}

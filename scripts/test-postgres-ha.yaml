@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pg-test-ha
+  labels:
+    istio.io/dataplane-mode: ambient
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kb-psa-pg-test-ha
+  namespace: pg-test-ha
+---
+apiVersion: apps.kubeblocks.io/v1
+kind: Cluster
+metadata:
+  name: pg-test-ha
+  namespace: pg-test-ha
+  annotations:
+    kubeblocks.io/use-default-pvc: "true"
+    kubeblocks.io/disable-monitoring: "true"
+spec:
+  clusterDef: postgresql
+  topology: replication
+  terminationPolicy: WipeOut
+  componentSpecs:
+    - name: postgresql
+      componentDef: postgresql-16-1.0.0  # Using PostgreSQL 16 which might have better HA support
+      serviceVersion: 16.4.0
+      replicas: 3  # Start with 2 replicas for simpler troubleshooting
+      serviceAccountName: kb-psa-pg-test-ha
+      labels:
+        apps.kubeblocks.postgres.patroni/scope: pg-test-ha-postgresql
+      disableExporter: true
+      resources:
+        limits:
+          cpu: 500m
+          memory: 512Mi
+        requests:
+          cpu: 200m
+          memory: 256Mi
+      volumeClaimTemplates:
+        - name: data
+          spec:
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: 1Gi
