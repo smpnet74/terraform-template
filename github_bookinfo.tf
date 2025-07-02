@@ -33,6 +33,45 @@ resource "github_repository_file" "bookinfo_manifests" {
   repository = github_repository.argocd_apps.name
   file       = "bookinfo-manifests/bookinfo.yaml"
   content    = <<-EOF
+# Kiali Bookinfo View ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kiali-bookinfo-view
+  namespace: istio-system
+  labels:
+    app: kiali
+    app.kubernetes.io/name: kiali
+    app.kubernetes.io/part-of: kiali
+data:
+  bookinfo-view: |
+    {
+      "name": "bookinfo",
+      "title": "Bookinfo Application",
+      "description": "Bookinfo sample application with Ambient Mesh",
+      "namespace": {
+        "name": "bookinfo"
+      },
+      "items": [
+        {
+          "type": "service",
+          "name": "productpage"
+        },
+        {
+          "type": "service",
+          "name": "reviews"
+        },
+        {
+          "type": "service",
+          "name": "details"
+        },
+        {
+          "type": "service",
+          "name": "ratings"
+        }
+      ]
+    }
+---
 # Namespace for Bookinfo application
 apiVersion: v1
 kind: Namespace

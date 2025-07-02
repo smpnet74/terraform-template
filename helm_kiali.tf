@@ -35,6 +35,16 @@ resource "helm_release" "kiali" {
     name  = "external_services.grafana.url"
     value = "http://grafana.istio-system:80"
   }
+    
+  # Configure Gateway API support
+  values = [
+    <<-EOT
+    external_services:
+      istio:
+        gateway_api_classes:
+          - name: "gateway.networking.k8s.io/v1"
+    EOT
+  ]
   
   depends_on = [
     kubectl_manifest.service_mesh_controller,
