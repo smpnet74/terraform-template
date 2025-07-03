@@ -85,26 +85,3 @@ resource "helm_release" "kubeblocks" {
     kubernetes_namespace.kb_system
   ]
 }
-
-# Install PostgreSQL addon for KubeBlocks
-resource "null_resource" "kubeblocks_postgresql_addon" {
-  provisioner "local-exec" {
-    command = "kubectl create -f https://github.com/apecloud/kubeblocks/releases/download/v1.0.0/kubeblocks_addon_postgresql.yaml || true"
-  }
-  
-  depends_on = [
-    helm_release.kubeblocks,
-    time_sleep.wait_for_kubeblocks_crds
-  ]
-}
-
-# Wait for PostgreSQL addon to be ready
-resource "time_sleep" "wait_for_postgresql_addon" {
-  depends_on = [null_resource.kubeblocks_postgresql_addon]
-  create_duration = "30s"
-}
-
-
-
-
-

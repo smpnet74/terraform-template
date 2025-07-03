@@ -61,10 +61,12 @@ output "kubeblocks_info" {
     KubeBlocks has been installed in the kb-system namespace.
     
     To access KubeBlocks:
-    1. Check the status of KubeBlocks: kubectl get pods -n kb-system
-    2. For more information, visit: https://www.kubeblocks.io/docs/preview/user_docs/overview
+    kubectl get pods -n kb-system
     
     PostgreSQL addon has been installed. You can create instances with:
     kubectl apply -f scripts/test-postgres.yaml
+    kubectl apply -f scripts/test-postgres-ha.yaml
+    kubectl apply -f scripts/test-redis.yaml
+    kubectl apply -f scripts/test-mongodb.yaml
   EOT
 }
