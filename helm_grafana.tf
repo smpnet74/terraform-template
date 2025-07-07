@@ -81,13 +81,14 @@ resource "helm_release" "grafana" {
 resource "null_resource" "update_kiali_for_grafana" {
   depends_on = [
     helm_release.grafana,
-    helm_release.kiali
+    helm_release.kiali,
+    local_file.cluster-config
   ]
   
   provisioner "local-exec" {
     command = <<-EOT
-      kubectl patch configmap/kiali -n istio-system --type=merge -p '{"data":{"external_services":"{\"grafana\":{\"enabled\":true,\"in_cluster_url\":\"http://grafana.istio-system:80\",\"url\":\"http://grafana.istio-system:80\"}}"}}' || true
-      kubectl rollout restart deployment/kiali -n istio-system
+      kubectl patch configmap/kiali -n istio-system --type=merge -p '{"data":{"external_services":"{\"grafana\":{\"enabled\":true,\"in_cluster_url\":\"http://grafana.istio-system:80\",\"url\":\"http://grafana.istio-system:80\"}}"}' --kubeconfig=${path.module}/kubeconfig || true
+      kubectl rollout restart deployment/kiali -n istio-system --kubeconfig=${path.module}/kubeconfig
     EOT
   }
 }

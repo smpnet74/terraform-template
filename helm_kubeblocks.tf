@@ -15,11 +15,12 @@ resource "kubernetes_namespace" "kb_system" {
 # Install KubeBlocks CRDs
 resource "null_resource" "kubeblocks_crds" {
   provisioner "local-exec" {
-    command = "kubectl create -f https://github.com/apecloud/kubeblocks/releases/download/v1.0.0/kubeblocks_crds.yaml --validate=false || true"
+    command = "kubectl create -f https://github.com/apecloud/kubeblocks/releases/download/v1.0.0/kubeblocks_crds.yaml --validate=false --kubeconfig=${path.module}/kubeconfig || true"
   }
   
   depends_on = [
-    kubernetes_namespace.kb_system
+    kubernetes_namespace.kb_system,
+    local_file.cluster-config
   ]
 }
 
