@@ -26,6 +26,8 @@ spec:
       prune: true
       selfHeal: true
 EOF
+
+  depends_on = [var.github_repository]
 }
 
 # Create the Bookinfo manifests file
@@ -368,6 +370,8 @@ spec:
         ports:
         - containerPort: 9080
 EOF
+
+  depends_on = [var.github_repository]
 }
 
 # Create the HTTPRoute for Bookinfo to expose via KGateway
@@ -398,6 +402,8 @@ spec:
     - name: productpage
       port: 9080
 EOF
+
+  depends_on = [var.github_repository]
 }
 
 # Bookinfo Application in ArgoCD
@@ -409,6 +415,8 @@ kind: Application
 metadata:
   name: bookinfo
   namespace: argocd
+  finalizers:
+  - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:

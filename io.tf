@@ -84,4 +84,10 @@ variable "enable_bookinfo" {
   default     = true
 }
 
+variable "enable_kubeflow" {
+  description = "Whether to deploy Kubeflow"
+  type        = bool
+  default     = true
+}
+
 # Output

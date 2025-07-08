@@ -1,7 +1,7 @@
-module "bookinfo" {
-  source = "./modules/bookinfo"
+module "kubeflow" {
+  source = "./modules/kubeflow"
 
-  enable_bookinfo = var.enable_bookinfo
+  enable_kubeflow = var.enable_kubeflow
   github_repo_name = github_repository.argocd_apps.name
   github_repo_url = github_repository.argocd_apps.html_url
   github_repository = github_repository.argocd_apps
