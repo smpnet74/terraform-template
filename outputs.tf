@@ -70,3 +70,8 @@ output "kubeblocks_info" {
     kubectl apply -f scripts/test-mongodb.yaml
   EOT
 }
+
+output "civo_kubeconfig_command" {
+  description = "Command to download and install the Civo Kubernetes cluster config"
+  value       = "civo kubernetes config ${var.cluster_name_prefix}cluster --save"
+}
