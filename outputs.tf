@@ -45,13 +45,18 @@ output "grafana_credentials" {
 }
 
 output "bookinfo_url" {
-  value = "https://bookinfo.${var.domain_name}"
+  value = module.bookinfo.bookinfo_url
   description = "URL to access the Bookinfo sample application through KGateway"
 }
 
 output "bookinfo_kiali_view" {
-  value = "Open Kiali and navigate to 'Graph' view, then select 'bookinfo' namespace to visualize the service mesh"
+  value = module.bookinfo.bookinfo_kiali_view
   description = "Instructions for viewing the Bookinfo application in Kiali"
+}
+
+output "bookinfo_enabled" {
+  value = module.bookinfo.is_enabled
+  description = "Whether the Bookinfo application is enabled"
 }
 
 # KubeBlocks information

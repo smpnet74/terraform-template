@@ -78,4 +78,10 @@ variable "github_repo_name" {
   default     = "k8s-app-configs"
 }
 
+variable "enable_bookinfo" {
+  description = "Whether to deploy the Bookinfo sample application"
+  type        = bool
+  default     = true
+}
+
 # Output
