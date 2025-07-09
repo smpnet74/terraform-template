@@ -12,42 +12,8 @@ kind: Kustomization
 namespace: kubeflow
 
 resources:
-- gateway.yaml
 - kubeflow-roles.yaml
 - test-service.yaml
-EOF
-}
-
-# Create the Kubeflow Gateway configuration
-resource "github_repository_file" "kubeflow_infra_gateway" {
-  count      = var.enable_kubeflow ? 1 : 0
-  repository = var.github_repo_name
-  file       = "kubeflow/infrastructure/gateway.yaml"
-  content    = <<-EOF
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: kubeflow-route
-  namespace: kubeflow
-spec:
-  hostnames:
-  - "kubeflow.${var.domain_name}"
-  parentRefs:
-  - group: gateway.networking.k8s.io
-    kind: Gateway
-    name: default-gateway
-    namespace: default
-  rules:
-  - backendRefs:
-    - group: ""
-      kind: Service
-      name: kubeflow-dashboard
-      port: 80
-      weight: 1
-    matches:
-    - path:
-        type: PathPrefix
-        value: /
 EOF
 }
 
@@ -165,6 +131,8 @@ metadata:
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
@@ -189,6 +157,18 @@ spec:
         duration: 5s
         factor: 2
         maxDuration: 3m
+  ignoreDifferences:
+    - group: ""
+      kind: Namespace
+      name: kubeflow
+      jsonPointers:
+        - /metadata/labels
+    - group: "gateway.networking.k8s.io"
+      kind: HTTPRoute
+      name: kubeflow-route
+      namespace: kubeflow
+      jsonPointers:
+        - /spec
 EOF
 
   depends_on = [
