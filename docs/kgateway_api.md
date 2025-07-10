@@ -12,11 +12,48 @@ Our implementation uses:
 
 ## Components
 
-### 1. Gateway API CRDs
+### Dual CRD Architecture
 
-The Gateway API Custom Resource Definitions (CRDs) are installed separately using kubectl to ensure we have the latest stable version (v1.2.1). These CRDs are then followed by Kgateway-specific CRDs via Helm chart.
+This implementation uses a **dual CRD installation strategy** that follows Gateway API community best practices:
 
-### 2. Kgateway Controller
+1. **Standard Gateway API CRDs** (v1.2.1)
+2. **Kgateway-specific CRDs** (v2.0.3)
+
+This separation ensures both **standard compatibility** and **vendor-specific functionality**.
+
+### 1. Standard Gateway API CRDs
+
+The core Gateway API Custom Resource Definitions are installed directly via kubectl to ensure we have the exact version (v1.2.1) required for standard compatibility:
+
+**Resources Provided:**
+- `gateways.gateway.networking.k8s.io` - Core Gateway resource
+- `httproutes.gateway.networking.k8s.io` - HTTP routing rules
+- `referencegrants.gateway.networking.k8s.io` - Cross-namespace access control
+- `gatewayclasses.gateway.networking.k8s.io` - Gateway implementation configuration
+
+**Why Separate Installation:**
+- **Version Control**: Ensures exact Gateway API version compatibility
+- **Vendor Neutrality**: Uses official Kubernetes Gateway API definitions
+- **Portability**: Enables switching between different Gateway implementations
+- **Stability**: Prevents conflicts between vendor CRDs and standard CRDs
+
+### 2. Kgateway-Specific CRDs
+
+The Kgateway-specific CRDs are installed via Helm chart to provide vendor-specific enhancements:
+
+**Resources Provided:**
+- `backends.gateway.kgateway.dev` - Advanced backend configuration
+- `trafficpolicies.gateway.kgateway.dev` - Traffic management policies
+- `gatewayparameters.gateway.kgateway.dev` - Kgateway-specific parameters
+- `httplistenerpolicies.gateway.kgateway.dev` - HTTP listener policies
+
+**Why Helm Installation:**
+- **Vendor Extensions**: Provides Kgateway-specific advanced features
+- **Version Alignment**: Matches Kgateway controller version (v2.0.3)
+- **Lifecycle Management**: Helm manages installation, upgrades, and removal
+- **Feature Enablement**: Unlocks advanced traffic policies and AI gateway capabilities
+
+### 3. Kgateway Controller
 
 [Kgateway](https://kgateway.dev/) is an open-source, Envoy-powered implementation of the Gateway API. It was previously known as Gloo and has been production-ready since 2019. Kgateway provides:
 
@@ -25,12 +62,13 @@ The Gateway API Custom Resource Definitions (CRDs) are installed separately usin
 - Support for the Gateway API specification
 - AI gateway capabilities for securing LLM usage
 
-### 3. Default Gateway
+### 4. Default Gateway
 
 A default Gateway resource is created in the default namespace. This Gateway:
 - Listens on ports 80 (HTTP) and 443 (HTTPS)
 - Allows routes from all namespaces
 - Uses TLS termination for HTTPS with Cloudflare Origin Certificates
+- Uses both **standard Gateway API** and **Kgateway-specific features**
 
 ## Usage
 
@@ -84,6 +122,40 @@ data:
 ```
 
 **Note**: Cloudflare SSL/TLS mode should be set to "Full" to ensure end-to-end encryption between Cloudflare edge and your cluster.
+
+## Architecture Benefits
+
+### Standard Compatibility
+
+Using standard Gateway API CRDs ensures:
+- **Ecosystem Compatibility**: Works with any Gateway API conformant tooling
+- **Vendor Independence**: Can migrate to other Gateway implementations (Istio, Envoy Gateway, etc.)
+- **Future-Proofing**: Automatically compatible with future Gateway API versions
+- **Community Support**: Follows Kubernetes community standards and best practices
+
+### Advanced Features
+
+Kgateway-specific CRDs enable:
+- **Traffic Policies**: Advanced routing, load balancing, and traffic management
+- **Security Features**: Authentication, authorization, and rate limiting
+- **AI Gateway**: Specialized features for LLM and AI workload management
+- **Enterprise Features**: Advanced observability and operational capabilities
+
+### Verification Commands
+
+To verify both CRD sets are properly installed:
+
+```bash
+# Check standard Gateway API CRDs
+kubectl get crd | grep "gateway.networking.k8s.io"
+
+# Check Kgateway-specific CRDs  
+kubectl get crd | grep "gateway.kgateway.dev"
+
+# Verify versions
+kubectl get crd gateways.gateway.networking.k8s.io -o jsonpath='{.metadata.annotations.gateway\.networking\.k8s\.io/bundle-version}'
+helm list -n kgateway-system
+```
 
 ## Migration from Traefik Ingress
 

@@ -1,22 +1,24 @@
 # Kgateway Troubleshooting Guide
 
-This guide provides detailed steps to troubleshoot Kgateway issues in your Kubernetes project. Gateway API with Kgateway can sometimes present challenges related to configuration, routing, and integration with other components. This document is tailored to the specifics of this project, which uses **Gateway API v1.2.1**, **Kgateway v2.0.2**, and integrates with **cert-manager** for TLS.
+This guide provides detailed steps to troubleshoot Kgateway issues in your Kubernetes project. Gateway API with Kgateway can sometimes present challenges related to configuration, routing, and integration with other components. This document is tailored to the specifics of this project, which uses **Gateway API v1.2.1**, **Kgateway v2.0.3**, and integrates with **Cloudflare Origin Certificates** for TLS.
 
 ---
 
 ## How It Works: The Big Picture
 
-This project implements the Gateway API using Kgateway as the controller. Here's a simplified overview of the architecture:
+This project implements the Gateway API using Kgateway as the controller with a **dual CRD architecture**. Here's a simplified overview of the architecture:
 
-1. **Gateway API CRDs**: The foundation of the API gateway functionality, providing resources like Gateway, HTTPRoute, and GatewayClass.
+1. **Standard Gateway API CRDs** (v1.2.1): The foundation providing vendor-neutral resources like Gateway, HTTPRoute, and GatewayClass.
 
-2. **Kgateway Controller**: An Envoy-based implementation of the Gateway API that watches for Gateway API resources and configures the underlying Envoy proxy accordingly.
+2. **Kgateway-Specific CRDs** (v2.0.3): Vendor-specific extensions providing advanced features like TrafficPolicies and Backends.
 
-3. **Gateway Resource**: Defines the entry point for traffic into the cluster, specifying listeners, ports, and TLS configuration.
+3. **Kgateway Controller**: An Envoy-based implementation that watches both standard and vendor-specific resources.
 
-4. **HTTPRoute Resources**: Define how HTTP traffic is routed to backend services based on hostnames, paths, and other criteria.
+4. **Gateway Resource**: Defines the entry point for traffic into the cluster, specifying listeners, ports, and TLS configuration.
 
-5. **TLS Termination**: Handled by the Gateway using certificates managed by cert-manager.
+5. **HTTPRoute Resources**: Define how HTTP traffic is routed to backend services based on hostnames, paths, and other criteria.
+
+6. **TLS Termination**: Handled by the Gateway using Cloudflare Origin Certificates.
 
 ---
 
@@ -45,18 +47,45 @@ kubectl get services -n kgateway-system
 * Deployments should show desired replicas matching available replicas
 * Services should be properly created
 
-### 1.2. Check Gateway API CRDs
+### 1.2. Check Dual CRD Installation
 
-**What it does:** This command verifies that the Gateway API CRDs are properly installed in the cluster.
+**What it does:** These commands verify that both standard Gateway API and Kgateway-specific CRDs are properly installed.
 
 ```bash
-# List Gateway API CRDs
+# Check Standard Gateway API CRDs (should show v1.2.1)
 kubectl get crds | grep gateway.networking.k8s.io
+
+# Check Kgateway-specific CRDs (should show v2.0.3 features)
+kubectl get crds | grep gateway.kgateway.dev
+
+# Verify Gateway API version
+kubectl get crd gateways.gateway.networking.k8s.io -o jsonpath='{.metadata.annotations.gateway\.networking\.k8s\.io/bundle-version}'
+
+# Verify Kgateway CRDs Helm installation
+helm list -n kgateway-system
 ```
 
 **What to look for:**
-* You should see CRDs like `gateways.gateway.networking.k8s.io`, `httproutes.gateway.networking.k8s.io`, etc.
-* The CRDs should be properly established (check the AGE column)
+
+**Standard Gateway API CRDs:**
+* `gateways.gateway.networking.k8s.io` - Core Gateway resource
+* `httproutes.gateway.networking.k8s.io` - HTTP routing rules
+* `referencegrants.gateway.networking.k8s.io` - Cross-namespace access control
+* `gatewayclasses.gateway.networking.k8s.io` - Gateway implementation configuration
+* Bundle version should show `v1.2.1`
+
+**Kgateway-Specific CRDs:**
+* `backends.gateway.kgateway.dev` - Advanced backend configuration
+* `trafficpolicies.gateway.kgateway.dev` - Traffic management policies
+* `gatewayparameters.gateway.kgateway.dev` - Kgateway-specific parameters
+* `httplistenerpolicies.gateway.kgateway.dev` - HTTP listener policies
+* Helm chart should show `kgateway-crds-v2.0.3`
+
+**Common Issues:**
+* **Missing Standard CRDs**: Check if `null_resource.gateway_api_crds` executed successfully
+* **Missing Kgateway CRDs**: Check if `helm_release.kgateway_crds` deployed successfully  
+* **Version Mismatch**: Verify both CRD sets have the correct versions
+* **Installation Order**: Kgateway CRDs should install after standard Gateway API CRDs
 
 ### 1.3. Verify Gateway Resources
 
@@ -244,9 +273,10 @@ kubectl get gateway default-gateway -n default -o yaml | grep -A 10 certificateR
 ```
 
 **Solution:**
-* Ensure the certificate is properly created by cert-manager
-* Verify the certificate secret name matches what's referenced in the Gateway
-* Check that the certificate is in the same namespace as the Gateway or properly referenced if in a different namespace
+* Ensure the Cloudflare Origin Certificate is properly loaded as a Kubernetes secret
+* Verify the certificate secret name matches what's referenced in the Gateway (`default-gateway-cert`)
+* Check that the certificate secret is in the same namespace as the Gateway (`default`)
+* Verify the secret contains both `tls.crt` and `tls.key` data
 
 ### 3.2. Routing Issues
 
@@ -300,12 +330,56 @@ echo | openssl s_client -connect your-domain.com:443 -servername your-domain.com
 ```
 
 **Solution:**
-* Ensure the certificate is valid and not expired
-* Verify the certificate covers the domain being accessed
-* Check that the certificate secret is properly referenced in the Gateway
-* Ensure the certificate is properly issued by cert-manager
+* Ensure the Cloudflare Origin Certificate is valid and not expired
+* Verify the certificate covers the domain being accessed (wildcard: `*.yourdomain.com`)
+* Check that the certificate secret `default-gateway-cert` is properly referenced in the Gateway
+* Ensure Cloudflare SSL/TLS mode is set to "Full" for end-to-end encryption
+* Verify the certificate files were properly loaded from the `/certs` directory
 
-### 3.5. Future AI Gateway Integration
+### 3.5. Dual CRD Installation Issues
+
+**Problem:** Issues with the dual CRD architecture where standard Gateway API CRDs conflict with Kgateway-specific CRDs.
+
+**Troubleshooting:**
+```bash
+# Check if both CRD sets are installed
+echo "=== Standard Gateway API CRDs ===" 
+kubectl get crd | grep gateway.networking.k8s.io
+
+echo "=== Kgateway-Specific CRDs ==="
+kubectl get crd | grep gateway.kgateway.dev
+
+# Verify installation order and timing
+kubectl get events --sort-by=.metadata.creationTimestamp | grep -i crd
+
+# Check for CRD conflicts or overlaps
+kubectl describe crd gateways.gateway.networking.k8s.io | grep -A 5 -B 5 "Conflict\|Error"
+
+# Verify Terraform resource status
+terraform show | grep -A 10 -B 5 "gateway_api_crds\|kgateway_crds"
+```
+
+**Solution:**
+* **Installation Order**: Ensure standard Gateway API CRDs install before Kgateway CRDs
+* **Version Compatibility**: Verify Gateway API v1.2.1 is compatible with Kgateway v2.0.3
+* **Terraform Dependencies**: Check that `time_sleep.wait_for_gateway_crds` provides adequate delay
+* **Resource Conflicts**: Remove any existing CRDs before reinstalling if conflicts occur
+* **Helm Status**: Verify `helm_release.kgateway_crds` deployed successfully without errors
+
+**Common Fixes:**
+```bash
+# If standard CRDs are missing, reinstall them
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/standard-install.yaml
+
+# If Kgateway CRDs are missing, reinstall via Helm
+helm uninstall kgateway-crds -n kgateway-system
+helm install kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds --version v2.0.3 -n kgateway-system --create-namespace
+
+# Verify both sets are working together
+kubectl api-resources | grep gateway
+```
+
+### 3.6. Future AI Gateway Integration
 
 **Problem:** Preparing for AI Gateway integration for LLM traffic.
 

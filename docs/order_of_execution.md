@@ -166,7 +166,7 @@ The secret depends on:
 
 ## 3. Gateway API and Kgateway
 
-### 3.1. Gateway API CRDs
+### 3.1. Standard Gateway API CRDs
 
 **File:** `kgateway_api.tf`
 
@@ -187,7 +187,14 @@ resource "null_resource" "gateway_api_crds" {
 }
 ```
 
-Installs the Gateway API CRDs. Depends on:
+Installs the **standard Gateway API CRDs** (v1.2.1) that provide vendor-neutral Gateway API resources:
+- `gateways.gateway.networking.k8s.io` - Core Gateway resource
+- `httproutes.gateway.networking.k8s.io` - HTTP routing rules  
+- `referencegrants.gateway.networking.k8s.io` - Cross-namespace access control
+
+**Purpose:** Ensures standard Kubernetes Gateway API compatibility and vendor independence.
+
+Depends on:
 - Cluster creation
 - Cluster readiness
 - Cilium upgrade completion
@@ -205,7 +212,7 @@ resource "time_sleep" "wait_for_gateway_crds" {
 
 Adds a 30-second delay after Gateway API CRDs installation to ensure they are established.
 
-### 3.3. Kgateway CRDs
+### 3.3. Kgateway-Specific CRDs
 
 **File:** `kgateway_api.tf`
 
@@ -214,7 +221,7 @@ resource "helm_release" "kgateway_crds" {
   name             = "kgateway-crds"
   repository       = "" # Using OCI registry instead of traditional Helm repo
   chart            = "oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds"
-  version          = "v2.0.2"  # Latest stable release as per docs
+  version          = "v2.0.3"  # Latest stable release as per docs
   namespace        = "kgateway-system"
   create_namespace = true
   atomic           = true
@@ -228,7 +235,20 @@ resource "helm_release" "kgateway_crds" {
 }
 ```
 
-Installs the Kgateway CRDs using Helm. Depends on Gateway API CRDs installation and the wait period.
+Installs **Kgateway-specific CRDs** (v2.0.3) that provide vendor-specific advanced features:
+- `backends.gateway.kgateway.dev` - Advanced backend configuration
+- `trafficpolicies.gateway.kgateway.dev` - Traffic management policies
+- `gatewayparameters.gateway.kgateway.dev` - Kgateway-specific parameters
+- `httplistenerpolicies.gateway.kgateway.dev` - HTTP listener policies
+
+**Purpose:** Enables advanced Kgateway features like traffic policies, AI gateway capabilities, and enterprise functionality.
+
+**Why Separate from Standard CRDs:** 
+- Maintains clear separation between standard and vendor-specific functionality
+- Allows for independent versioning and lifecycle management
+- Follows Gateway API community best practices
+
+Depends on Gateway API CRDs installation and the wait period.
 
 ### 3.4. Wait for Kgateway CRDs
 
@@ -270,7 +290,6 @@ resource "helm_release" "kgateway" {
 Deploys Kgateway using Helm. Depends on:
 - Kgateway CRDs installation
 - Wait period after CRDs installation
-- cert-manager deployment
 
 ### 3.6. Default Gateway Resource
 
