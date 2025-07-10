@@ -13,6 +13,7 @@ The Terraform project deploys a complete Kubernetes infrastructure with the foll
 5. DNS configuration with Cloudflare (proxied)
 6. Gloo Operator and Ambient Mesh installation
 7. ArgoCD for GitOps
+8. Argo Workflows for CI/CD (optional)
 
 ## 1. Cluster Creation and Initial Setup
 
@@ -649,7 +650,194 @@ Creates an HTTPRoute for ArgoCD to expose it through the Gateway. Depends on:
 - Let's Encrypt issuer
 - Gateway certificate
 
-## 6. Execution Order Summary
+## 7. Argo Workflows Deployment (Optional)
+
+### 7.1. Argo Workflows Helm Release
+
+**File:** `argo_workflows.tf`
+
+```hcl
+resource "helm_release" "argo_workflows" {
+  count      = var.enable_argo_workflows ? 1 : 0
+  name       = "argo-workflows"
+  repository = "https://argoproj.github.io/argo-helm"
+  chart      = "argo-workflows"
+  version    = var.argo_workflows_chart_version
+  namespace  = "argo"
+  create_namespace = true
+
+  values = [
+    yamlencode({
+      server = {
+        enabled = true
+        extraArgs = [
+          "--auth-mode=server"
+        ]
+        secure = false
+      }
+      controller = {
+        enabled = true
+      }
+      workflow = {
+        serviceAccount = {
+          create = true
+        }
+      }
+    })
+  ]
+
+  depends_on = [
+    time_sleep.wait_for_cluster
+  ]
+}
+```
+
+Deploys Argo Workflows for in-cluster CI/CD capabilities. Depends on cluster readiness.
+
+### 7.2. Argo Events Helm Release
+
+**File:** `argo_workflows.tf`
+
+```hcl
+resource "helm_release" "argo_events" {
+  count      = var.enable_argo_workflows ? 1 : 0
+  name       = "argo-events"
+  repository = "https://argoproj.github.io/argo-helm"
+  chart      = "argo-events"
+  version    = var.argo_events_chart_version
+  namespace  = "argo"
+  create_namespace = false
+
+  values = [
+    yamlencode({
+      eventbus = {
+        enabled = true
+        jetstream = {
+          enabled = true
+        }
+      }
+      eventsource = {
+        enabled = true
+      }
+      sensor = {
+        enabled = true
+      }
+    })
+  ]
+
+  depends_on = [
+    helm_release.argo_workflows
+  ]
+}
+```
+
+Deploys Argo Events for EventSources and Sensors. Depends on Argo Workflows deployment.
+
+### 7.3. EventBus Configuration
+
+**File:** `argo_workflows.tf`
+
+```hcl
+resource "kubectl_manifest" "eventbus_default" {
+  count = var.enable_argo_workflows ? 1 : 0
+  yaml_body = <<-YAML
+apiVersion: argoproj.io/v1alpha1
+kind: EventBus
+metadata:
+  name: default
+  namespace: argo
+spec:
+  jetstream:
+    version: "2.9.6"
+    replicas: 3
+    persistence:
+      storageClassName: "civo-volume"
+      accessMode: ReadWriteOnce
+      volumeSize: 10Gi
+YAML
+
+  depends_on = [
+    helm_release.argo_events
+  ]
+}
+```
+
+Creates an EventBus for event communication between EventSources and Sensors.
+
+### 7.4. Argo Workflows HTTPRoute
+
+**File:** `argo_workflows.tf`
+
+```hcl
+resource "kubectl_manifest" "httproute_argo_workflows" {
+  count = var.enable_argo_workflows ? 1 : 0
+  yaml_body = <<-YAML
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: argo-workflows
+  namespace: argo
+spec:
+  parentRefs:
+    - name: default-gateway
+      namespace: default
+      kind: Gateway
+  hostnames:
+    - "argo-workflows.${var.domain_name}"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: argo-workflows-server
+          port: 2746
+          kind: Service
+YAML
+
+  depends_on = [
+    helm_release.argo_workflows,
+    kubectl_manifest.default_gateway
+  ]
+}
+```
+
+Exposes Argo Workflows server through the Gateway for web UI access.
+
+### 7.5. ReferenceGrant for Cross-Namespace Access
+
+**File:** `argo_workflows.tf`
+
+```hcl
+resource "kubectl_manifest" "reference_grant_argo_workflows" {
+  count = var.enable_argo_workflows ? 1 : 0
+  yaml_body = <<-YAML
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-argo-to-default-gateway
+  namespace: default
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: argo
+  to:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: default-gateway
+YAML
+
+  depends_on = [
+    helm_release.argo_workflows,
+    kubectl_manifest.default_gateway
+  ]
+}
+```
+
+Allows HTTPRoute in the `argo` namespace to reference the Gateway in the `default` namespace.
+
+## 8. Execution Order Summary
 
 The complete execution order of the Terraform components is as follows:
 
@@ -684,7 +872,14 @@ The complete execution order of the Terraform components is as follows:
    - ArgoCD Helm Release
    - ArgoCD HTTPRoute
 
-## 7. Architecture Evolution Path
+7. **CI/CD Platform (Optional)**
+   - Argo Workflows Helm Release (v0.45.19 - Argo Workflows 3.6.10)
+   - Argo Events Helm Release (v2.4.15 - compatible with Argo Workflows 3.6.10)
+   - EventBus Configuration (JetStream-based event communication)
+   - Argo Workflows HTTPRoute
+   - ReferenceGrant for cross-namespace access
+
+## 8. Architecture Evolution Path
 
 This execution order establishes the foundation for the architecture evolution goals:
 

@@ -32,6 +32,14 @@ This document provides a comprehensive list of all components and their versions
 |-----------|---------|-------------|
 | ArgoCD | v7.3.8 | Declarative GitOps continuous delivery tool for Kubernetes |
 
+## Continuous Integration & Workflows
+
+| Component | Version | Description |
+|-----------|---------|-------------|
+| Argo Workflows | v3.6.10 (Chart: v0.45.19) | Container-native workflow engine for CI/CD |
+| Argo Events | v1.9.6 (Chart: v2.4.15) | Event-driven workflow automation |
+| EventBus (JetStream) | v2.9.6 | Event streaming for Argo Events communication |
+
 ## Service Mesh
 
 | Component | Version | Description |
@@ -41,14 +49,22 @@ This document provides a comprehensive list of all components and their versions
 | Istio CNI | v1.26.2 | CNI plugin for traffic interception (chained with Cilium) |
 | Ztunnel | v1.26.2 | Ambient data plane proxy for east-west traffic |
 
-## Machine Learning Platform
+## Observability Stack
 
 | Component | Version | Description |
 |-----------|---------|-------------|
+| Grafana | Latest | Metrics visualization and dashboards |
+| Prometheus | Latest | Metrics collection and monitoring |
+| Kiali | Latest | Service mesh observability and management |
 
-| Jupyter Web App | v1.7.0 | Web UI for creating and managing Jupyter notebook servers |
-| Notebook Controller | v1.7.0 | Controller for managing notebook instances |
-| Volumes Web App | v1.7.0 | Web UI for managing persistent volumes |
+## Database Platform
+
+| Component | Version | Description |
+|-----------|---------|-------------|
+| KubeBlocks | v1.0.0 | Cloud-native database management platform |
+| PostgreSQL Addon | Latest | PostgreSQL database engine support |
+| Redis Addon | Latest | Redis in-memory database support |
+| MongoDB Addon | Latest | MongoDB document database support |
 
 ## Architecture Roadmap Components
 
@@ -65,8 +81,11 @@ The following components are part of the architecture evolution roadmap but not 
 - Cilium is configured with Hubble for observability and `cni.exclusive: false` for Ambient Mesh compatibility
 - Kgateway is configured with wildcard TLS certificate for all subdomains
 - ArgoCD is configured for GitOps-based application deployment
+- Argo Workflows provides in-cluster CI/CD with Kaniko for container builds
 - Ambient Mesh is installed via Gloo Operator with specific configuration for Cilium compatibility:
   - Istio CNI is configured as a chained plugin alongside Cilium
   - eBPF is used for traffic redirection in ztunnel
   - PILOT_ENABLE_AMBIENT environment variable is set for istiod
   - Installation follows the order: istio-base → istio-cni → istiod → ztunnel
+- All components are accessible via HTTPRoutes through the default Gateway
+- Version pinning is configurable via Terraform variables for Argo Workflows components

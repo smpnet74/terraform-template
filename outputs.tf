@@ -59,6 +59,11 @@ output "bookinfo_enabled" {
   description = "Whether the Bookinfo application is enabled"
 }
 
+output "argo_workflows_url" {
+  description = "The URL for the Argo Workflows web UI."
+  value       = var.enable_argo_workflows ? "https://argo-workflows.${var.domain_name}" : "disabled"
+}
+
 # KubeBlocks information
 output "kubeblocks_info" {
   description = "Information about the KubeBlocks installation and available addons"

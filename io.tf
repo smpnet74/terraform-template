@@ -85,4 +85,22 @@ variable "enable_bookinfo" {
 }
 
 
+variable "enable_argo_workflows" {
+  description = "Whether to deploy Argo Workflows for in-cluster builds"
+  type        = bool
+  default     = false
+}
+
+variable "argo_workflows_chart_version" {
+  description = "Version of the Argo Workflows Helm chart"
+  type        = string
+  default     = "0.45.19"  # Argo Workflows 3.6.10
+}
+
+variable "argo_events_chart_version" {
+  description = "Version of the Argo Events Helm chart"
+  type        = string
+  default     = "2.4.15"   # Latest compatible with Argo Workflows 3.6.10
+}
+
 # Output
