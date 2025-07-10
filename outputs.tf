@@ -59,17 +59,6 @@ output "bookinfo_enabled" {
   description = "Whether the Bookinfo application is enabled"
 }
 
-# Kubeflow outputs
-output "kubeflow_url" {
-  value = module.kubeflow.kubeflow_url
-  description = "URL to access the Kubeflow dashboard"
-}
-
-output "kubeflow_enabled" {
-  value = module.kubeflow.kubeflow_enabled
-  description = "Whether Kubeflow is enabled"
-}
-
 # KubeBlocks information
 output "kubeblocks_info" {
   description = "Information about the KubeBlocks installation and available addons"

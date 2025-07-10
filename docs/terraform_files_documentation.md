@@ -44,8 +44,7 @@ Defines the root ArgoCD application that manages all other applications in the c
 ### `argocd_bookinfo.tf`
 Configures the Bookinfo module which sets up the Bookinfo sample application through ArgoCD.
 
-### `argocd_kubeflow.tf`
-Configures the Kubeflow module which deploys Kubeflow through ArgoCD.
+
 
 ## Helm Deployments
 
@@ -99,4 +98,4 @@ Manages dependencies between Kubernetes resources to ensure proper deployment or
 The project includes two main modules (not detailed as per request):
 
 - `modules/bookinfo/`: Manages the Bookinfo sample application deployment
-- `modules/kubeflow/`: Manages the Kubeflow machine learning platform deployment
+

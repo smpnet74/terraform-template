@@ -7,4 +7,3 @@
    cluster_node_size = "g4s.kube.small"
    region = "NYC1"
    enable_bookinfo = false
-   enable_kubeflow = false

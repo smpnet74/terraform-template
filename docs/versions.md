@@ -45,9 +45,7 @@ This document provides a comprehensive list of all components and their versions
 
 | Component | Version | Description |
 |-----------|---------|-------------|
-| Kubeflow | v1.7.0 | Machine learning platform for Kubernetes |
-| Kubeflow Dashboard | v1.7.0 | Central dashboard for Kubeflow components |
-| Kubeflow Profiles | v1.7.0 | Multi-user isolation and namespace management |
+
 | Jupyter Web App | v1.7.0 | Web UI for creating and managing Jupyter notebook servers |
 | Notebook Controller | v1.7.0 | Controller for managing notebook instances |
 | Volumes Web App | v1.7.0 | Web UI for managing persistent volumes |

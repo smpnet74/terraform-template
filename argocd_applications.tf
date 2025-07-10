@@ -24,7 +24,6 @@ EOF
   depends_on = [
     helm_release.argocd,
     module.bookinfo,
-    module.kubeflow,
     time_sleep.wait_for_cluster
   ]
 }
