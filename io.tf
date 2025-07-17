@@ -92,18 +92,11 @@ variable "jetstream_version" {
   default     = "2.10.10"  # Uses config reloader 0.14.0 (working version)
 }
 
-variable "argo_workflows_username" {
-  description = "Username for Argo Workflows UI basic authentication"
+variable "metrics_server_chart_version" {
+  description = "Version of the Metrics Server Helm chart"
   type        = string
-  default     = "admin"
-  sensitive   = true
+  default     = "3.12.1"  # Latest stable version
 }
 
-variable "argo_workflows_password" {
-  description = "Password for Argo Workflows UI basic authentication"
-  type        = string
-  default     = "changeme"
-  sensitive   = true
-}
 
 # Output

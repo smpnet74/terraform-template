@@ -10,5 +10,4 @@
    argo_workflows_chart_version = "0.45.19"  # Argo Workflows 3.6.10
    argo_events_chart_version = "2.4.15"      # Latest compatible with Argo Workflows 3.6.10
    jetstream_version = "2.10.10"             # Uses config reloader 0.14.0 (working version)
-   argo_workflows_username = "admin"
-   argo_workflows_password = "your-secure-password"
+   metrics_server_chart_version = "3.12.1"  # Latest stable version

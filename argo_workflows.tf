@@ -12,13 +12,9 @@ resource "helm_release" "argo_workflows" {
       server = {
         enabled = true
         extraArgs = [
-          "--auth-mode=basic"
+          "--auth-mode=server"
         ]
         secure = false
-        basicAuth = {
-          enabled = true
-          secretName = "argo-workflows-auth"
-        }
       }
       controller = {
         enabled = true
@@ -92,22 +88,6 @@ YAML
   ]
 }
 
-# Basic auth secret for Argo Workflows UI
-resource "kubernetes_secret" "argo_workflows_auth" {
-  count = var.enable_argo_workflows ? 1 : 0
-  metadata {
-    name      = "argo-workflows-auth"
-    namespace = "argo"
-  }
-  data = {
-    username = var.argo_workflows_username
-    password = var.argo_workflows_password
-  }
-
-  depends_on = [
-    helm_release.argo_workflows
-  ]
-}
 
 
 resource "kubectl_manifest" "httproute_argo_workflows" {

@@ -50,6 +50,7 @@ kubectl get pods -A
 - **Cilium CNI**: Network plugin (v1.17.5) with Hubble observability, configured for Ambient Mesh compatibility (`cni.exclusive: false`)
 - **Gateway API + Kgateway**: Modern ingress using Gateway API v1.2.1 with Kgateway v2.0.3 for advanced routing
 - **Cloudflare Integration**: DNS management and Origin Certificates for TLS termination
+- **Metrics Server**: Kubernetes resource utilization metrics for monitoring and autoscaling
 - **Istio Ambient Mesh**: Service mesh prepared for implementation
 
 ### Optional Components
@@ -70,6 +71,7 @@ The Terraform configuration follows a strict execution order:
 - `io.tf`: Input/output variable definitions
 - `cluster.tf`: Civo cluster creation and kubeconfig generation
 - `cluster_ready_delay.tf`: Ensures cluster API server readiness
+- `helm_metrics_server.tf`: Kubernetes resource utilization metrics collection
 
 ### Networking & Security
 - `helm_cilium.tf`: Cilium CNI upgrade with Ambient Mesh compatibility
@@ -108,6 +110,7 @@ enable_argo_workflows = true
 argo_workflows_chart_version = "0.45.19"  # Argo Workflows 3.6.10
 argo_events_chart_version = "2.4.15"      # Compatible with Argo Workflows 3.6.10
 jetstream_version = "2.10.10"             # Uses config reloader 0.14.0 (stable version)
+metrics_server_chart_version = "3.12.1"  # Latest stable version
 ```
 
 ## Security Considerations
