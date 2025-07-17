@@ -6,7 +6,9 @@
    cloudflare_email = "your-cloudflare-email"
    cluster_node_size = "g4s.kube.small"
    region = "NYC1"
-   enable_bookinfo = false
    enable_argo_workflows = true
    argo_workflows_chart_version = "0.45.19"  # Argo Workflows 3.6.10
    argo_events_chart_version = "2.4.15"      # Latest compatible with Argo Workflows 3.6.10
+   jetstream_version = "2.10.10"             # Uses config reloader 0.14.0 (working version)
+   argo_workflows_username = "admin"
+   argo_workflows_password = "your-secure-password"

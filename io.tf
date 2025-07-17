@@ -66,23 +66,6 @@ variable "domain_name" {
   default     = "timbersedgearb.com"
 }
 
-variable "github_token" {
-  type        = string
-  description = "The GitHub token to use for creating and managing the GitOps repository"
-  sensitive   = true
-}
-
-variable "github_repo_name" {
-  type        = string
-  description = "The name of the repository to create for GitOps"
-  default     = "k8s-app-configs"
-}
-
-variable "enable_bookinfo" {
-  description = "Whether to deploy the Bookinfo sample application"
-  type        = bool
-  default     = true
-}
 
 
 variable "enable_argo_workflows" {
@@ -100,7 +83,27 @@ variable "argo_workflows_chart_version" {
 variable "argo_events_chart_version" {
   description = "Version of the Argo Events Helm chart"
   type        = string
-  default     = "2.4.15"   # Latest compatible with Argo Workflows 3.6.10
+  default     = "2.4.15"   # Compatible with Argo Workflows 3.6.10
+}
+
+variable "jetstream_version" {
+  description = "Version of JetStream for Argo Events EventBus"
+  type        = string
+  default     = "2.10.10"  # Uses config reloader 0.14.0 (working version)
+}
+
+variable "argo_workflows_username" {
+  description = "Username for Argo Workflows UI basic authentication"
+  type        = string
+  default     = "admin"
+  sensitive   = true
+}
+
+variable "argo_workflows_password" {
+  description = "Password for Argo Workflows UI basic authentication"
+  type        = string
+  default     = "changeme"
+  sensitive   = true
 }
 
 # Output

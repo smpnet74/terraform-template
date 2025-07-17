@@ -1,12 +1,3 @@
-output "argocd_url" {
-  description = "The URL for the Argo CD web UI."
-  value       = "https://test-argocd.${var.domain_name}"
-}
-
-output "argocd_password_instructions" {
-  description = "Command to retrieve the initial Argo CD admin password."
-  value       = "kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d"
-}
 
 output "hubble_ui_access" {
   description = "Command to access the Hubble UI for Cilium network observability."
@@ -44,20 +35,6 @@ output "grafana_credentials" {
   description = "Default credentials for Grafana (change these in production)"
 }
 
-output "bookinfo_url" {
-  value = module.bookinfo.bookinfo_url
-  description = "URL to access the Bookinfo sample application through KGateway"
-}
-
-output "bookinfo_kiali_view" {
-  value = module.bookinfo.bookinfo_kiali_view
-  description = "Instructions for viewing the Bookinfo application in Kiali"
-}
-
-output "bookinfo_enabled" {
-  value = module.bookinfo.is_enabled
-  description = "Whether the Bookinfo application is enabled"
-}
 
 output "argo_workflows_url" {
   description = "The URL for the Argo Workflows web UI."
@@ -69,11 +46,7 @@ output "kubeblocks_info" {
   description = "Information about the KubeBlocks installation and available addons"
   value = <<-EOT
     KubeBlocks has been installed in the kb-system namespace.
-    
-    To access KubeBlocks:
-    kubectl get pods -n kb-system
-    
-    PostgreSQL addon has been installed. You can create instances with:
+
     kubectl apply -f scripts/test-postgres.yaml
     kubectl apply -f scripts/test-postgres-ha.yaml
     kubectl apply -f scripts/test-redis.yaml
