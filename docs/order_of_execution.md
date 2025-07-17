@@ -767,7 +767,7 @@ metadata:
   namespace: argo
 spec:
   jetstream:
-    version: "2.9.6"
+    version: "2.10.10"
     replicas: 3
     persistence:
       storageClassName: "civo-volume"

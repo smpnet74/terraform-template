@@ -38,7 +38,8 @@ This document provides a comprehensive list of all components and their versions
 |-----------|---------|-------------|
 | Argo Workflows | v3.6.10 (Chart: v0.45.19) | Container-native workflow engine for CI/CD |
 | Argo Events | v1.9.6 (Chart: v2.4.15) | Event-driven workflow automation |
-| EventBus (JetStream) | v2.9.6 | Event streaming for Argo Events communication |
+| EventBus (JetStream) | v2.10.10 | Event streaming for Argo Events communication |
+| Metrics Server | v3.12.1 | Kubernetes resource metrics collection |
 
 ## Service Mesh
 
