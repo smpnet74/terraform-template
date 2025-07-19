@@ -11,3 +11,10 @@
    argo_events_chart_version = "2.4.15"      # Latest compatible with Argo Workflows 3.6.10
    jetstream_version = "2.10.10"             # Uses config reloader 0.14.0 (working version)
    metrics_server_chart_version = "3.12.1"  # Latest stable version
+
+   # Kyverno Policy Engine Configuration
+   enable_kyverno = true                     # Deploy Kyverno policy engine
+   enable_kyverno_policies = true            # Deploy pre-built security policies
+   kyverno_chart_version = "3.4.4"          # Kyverno v1.14.4
+   kyverno_policies_chart_version = "3.4.4" # Compatible with Kyverno v1.14.4
+   kyverno_policy_exclusions = ["kube-system", "kyverno", "kgateway-system", "local-path-storage"]

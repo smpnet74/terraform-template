@@ -235,3 +235,7 @@ This is a clean, production-ready Kubernetes cluster optimized for:
 - **Development and production workloads**
 
 The cluster provides a solid foundation without opinionated application deployment patterns, allowing teams to choose their preferred GitOps or deployment methodology.
+
+## Memories
+
+- Learned how to memorize text in a markdown file

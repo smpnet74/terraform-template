@@ -1,5 +1,11 @@
 variable "civo_token" {}
 
+variable "github_token" {
+  description = "GitHub personal access token for repository management"
+  type        = string
+  sensitive   = true
+}
+
 variable "region" {
   type        = string
   default     = "FRA1"
@@ -96,6 +102,37 @@ variable "metrics_server_chart_version" {
   description = "Version of the Metrics Server Helm chart"
   type        = string
   default     = "3.12.1"  # Latest stable version
+}
+
+# Kyverno Configuration
+variable "enable_kyverno" {
+  description = "Whether to deploy Kyverno policy engine"
+  type        = bool
+  default     = true
+}
+
+variable "kyverno_chart_version" {
+  description = "Version of the Kyverno Helm chart"
+  type        = string
+  default     = "3.4.4"  # Kyverno v1.14.4
+}
+
+variable "kyverno_policies_chart_version" {
+  description = "Version of the Kyverno Policies Helm chart"
+  type        = string
+  default     = "3.4.4"  # Compatible with Kyverno v1.14.4
+}
+
+variable "enable_kyverno_policies" {
+  description = "Whether to deploy pre-built Kyverno policies"
+  type        = bool
+  default     = true
+}
+
+variable "kyverno_policy_exclusions" {
+  description = "Namespaces to exclude from Kyverno policies"
+  type        = list(string)
+  default     = ["kube-system", "kyverno", "kgateway-system", "local-path-storage"]
 }
 
 

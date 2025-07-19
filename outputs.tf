@@ -41,17 +41,48 @@ output "argo_workflows_url" {
   value       = var.enable_argo_workflows ? "https://argo-workflows.${var.domain_name}" : "disabled"
 }
 
+# Kyverno information
+output "kyverno_ui_info" {
+  description = "Information about Kyverno web interface availability."
+  value       = var.enable_kyverno ? "Kyverno CLI-based management (no web UI deployed). To add Policy Reporter UI, see httproute_kyverno.tf" : "Kyverno is disabled"
+}
+
+output "kyverno_status_commands" {
+  description = "Commands to check Kyverno status and policies"
+  value = var.enable_kyverno ? join("\n", [
+    "Check Kyverno pods:        kubectl get pods -n kyverno",
+    "View cluster policies:     kubectl get clusterpolicies", 
+    "View policy reports:       kubectl get clusterpolicyreports",
+    "View background reports:   kubectl get backgroundscanreports"
+  ]) : "Kyverno is disabled"
+}
+
+output "kyverno_policy_info" {
+  description = "Information about deployed Kyverno policies"
+  value = var.enable_kyverno ? join("\n", [
+    "Kyverno Policy Engine v1.14.4 has been deployed with:",
+    "",
+    "• Pre-built policies: ${var.enable_kyverno_policies ? "Enabled (Pod Security Standards baseline)" : "Disabled"}",
+    "• Custom policies: Gateway API governance, Cilium Network Policy governance", 
+    "• Ambient Mesh preparation: Automatic namespace labeling for Istio",
+    "• Certificate validation: Cloudflare Origin Certificate standards",
+    "• Resource requirements: CPU and memory requests enforcement",
+    "",
+    "Excluded namespaces: ${join(", ", var.kyverno_policy_exclusions)}"
+  ]) : "Kyverno is disabled"
+}
+
 # KubeBlocks information
 output "kubeblocks_info" {
   description = "Information about the KubeBlocks installation and available addons"
-  value = <<-EOT
-    KubeBlocks has been installed in the kb-system namespace.
-
-    kubectl apply -f scripts/test-postgres.yaml
-    kubectl apply -f scripts/test-postgres-ha.yaml
-    kubectl apply -f scripts/test-redis.yaml
-    kubectl apply -f scripts/test-mongodb.yaml
-  EOT
+  value = join("\n", [
+    "KubeBlocks has been installed in the kb-system namespace.",
+    "",
+    "kubectl apply -f scripts/test-postgres.yaml",
+    "kubectl apply -f scripts/test-postgres-ha.yaml", 
+    "kubectl apply -f scripts/test-redis.yaml",
+    "kubectl apply -f scripts/test-mongodb.yaml"
+  ])
 }
 
 output "civo_kubeconfig_command" {
