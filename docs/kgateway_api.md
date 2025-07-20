@@ -130,7 +130,7 @@ data:
 Using standard Gateway API CRDs ensures:
 - **Ecosystem Compatibility**: Works with any Gateway API conformant tooling
 - **Vendor Independence**: Can migrate to other Gateway implementations (Istio, Envoy Gateway, etc.)
-- **Future-Proofing**: Automatically compatible with future Gateway API versions
+- **Standards Compliance**: Compatible with Gateway API specifications
 - **Community Support**: Follows Kubernetes community standards and best practices
 
 ### Advanced Features

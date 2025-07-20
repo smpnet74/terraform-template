@@ -83,14 +83,6 @@ This command will show:
 
 To upgrade Ambient Mesh, simply update the `version` field in the ServiceMeshController resource. The operator will perform a rolling upgrade of all components. No application restarts are required due to the nature of Ambient Mesh.
 
-## Architecture Evolution
-
-This installation completes the architecture evolution goals:
-
-1. **Application building-blocks**: Dapr (to be implemented)
-2. **General ingress/gateway**: Gateway API with Kgateway (implemented)
-3. **AI Gateway**: Gateway API for LLM traffic (to be implemented)
-4. **Service mesh**: Ambient Mesh for east-west mTLS, retries, and telemetry (implemented via Gloo Operator)
 
 ## References
 

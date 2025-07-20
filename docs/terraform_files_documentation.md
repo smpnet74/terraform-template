@@ -29,14 +29,18 @@ Defines all input variables for the Terraform project, including:
 - **Infrastructure Variables**: Cluster size, region (default: FRA1), node configuration
 - **Networking Variables**: Firewall rules, domain configuration (default: timbersedgearb.com)
 - **Integration Variables**: Civo, GitHub, Cloudflare API tokens
-- **Feature Toggles**: Enable/disable Argo Workflows (default: false)
-- **Version Control**: Pinned versions for Argo Workflows (v0.45.19), Argo Events (v2.4.15), JetStream (v2.10.10), Metrics Server (v3.12.1)
+- **Feature Toggles**: Enable/disable Argo Workflows (default: false), Kyverno (default: true), Prometheus Operator (default: true)
+- **Policy Configuration**: Kyverno policy exclusions, Policy Reporter UI settings
+- **Monitoring Variables**: Prometheus Operator version (v61.9.0), monitoring namespace
+- **Version Control**: Pinned versions for Argo Workflows (v0.45.19), Argo Events (v2.4.15), JetStream (v2.10.10), Metrics Server (v3.12.1), Kyverno (v3.4.4), Policy Reporter (v2.22.0)
 
 ### `outputs.tf`
 Defines output values displayed after deployment:
-- **Access URLs**: Kiali, Grafana, Argo Workflows endpoints
+- **Access URLs**: Kiali, Grafana, Argo Workflows, Policy Reporter endpoints
 - **Access Commands**: Hubble UI, Kiali port-forward, Civo kubeconfig commands
 - **Platform Information**: KubeBlocks usage instructions and test scripts
+- **Policy Information**: Kyverno status commands and policy framework details
+- **Monitoring Stack**: Prometheus Operator components and port-forward commands
 - **Credentials**: Default Grafana credentials (admin/admin)
 
 ### `cluster_ready_delay.tf`
@@ -91,26 +95,53 @@ Manages DNS records in Cloudflare:
 - **Dynamic IP Resolution**: Waits for load balancer IP assignment with preconditions
 - **Fallback Handling**: Graceful handling of IP assignment delays
 
-## GitOps and CI/CD
+## Storage and Infrastructure Dependencies
 
-### `github.tf`
-Creates and configures the GitOps repository:
-- **Repository Creation**: Automated GitHub repo setup
-- **Initial Structure**: Basic GitOps directory layout
-- **ArgoCD Integration**: Repository connection for continuous deployment
+### `csi-snapshot-crds.tf`
+Installs CSI Snapshot Controller CRDs:
+- **Volume Snapshots**: Enables persistent volume backup and restore
+- **CRD Installation**: VolumeSnapshot, VolumeSnapshotContent, VolumeSnapshotClass
+- **Dependencies**: Required before any storage operations
+- **Civo Integration**: Works with Civo Cloud storage backend
 
-### `argocd_applications.tf`
-Defines the root ArgoCD application using app-of-apps pattern:
-- **Root Application**: Manages all other applications
-- **GitOps Repository**: Syncs from created GitHub repo
-- **Automatic Sync**: Continuous deployment of applications
-- **Self-healing**: Automatic drift correction
+### `civo-volumesnapshotclass.tf`
+Configures volume snapshot capabilities:
+- **Snapshot Class**: Defines snapshot parameters for Civo volumes
+- **Backup Strategy**: Enables point-in-time backups for persistent storage
+- **Database Support**: Critical for KubeBlocks database persistence
 
-### `argocd_bookinfo.tf`
-Configures the Bookinfo sample application module:
-- **Conditional Deployment**: Controlled by `enable_bookinfo` variable
-- **Module Integration**: Uses `modules/bookinfo/` for deployment
-- **ArgoCD Management**: Deployed through GitOps workflow
+## Policy Engine and Governance
+
+### `helm_kyverno.tf`
+Deploys Kyverno policy engine:
+- **Version**: v1.14.4 (chart v3.4.4) with admission and cleanup controllers
+- **Resource Management**: 100m CPU, 256Mi memory requests; 300m CPU, 512Mi limits
+- **Webhook Configuration**: Proper validating and mutating webhook setup
+- **Background Scanning**: Continuous compliance checking for existing resources
+- **Dependencies**: Waits for cluster readiness before deployment
+
+### `helm_kyverno_policies.tf`
+Installs pre-built Kyverno policies:
+- **Pod Security Standards**: Baseline security policies for container hardening
+- **Policy Collection**: 11 pre-built policies covering common security requirements
+- **Namespace Exclusions**: System namespaces excluded from policy enforcement
+- **Conditional Deployment**: Controlled by `enable_kyverno_policies` variable
+
+### `kyverno_custom_policies.tf`
+Implements custom cluster-specific policies:
+- **Gateway API Standards**: HTTPRoute validation for proper Gateway references
+- **Cilium Network Policy Governance**: Network policy annotation requirements
+- **Istio Ambient Mesh Preparation**: Automatic namespace labeling for mesh inclusion
+- **Cloudflare Certificate Standards**: TLS secret validation and formatting
+- **Resource Requirements**: Production workload resource enforcement with exemptions
+
+### `httproute_kyverno.tf`
+Deploys Policy Reporter UI for policy management:
+- **Conditional Deployment**: Basic vs full monitoring integration
+- **Policy Reporter**: v2.22.0 with SQLite database for policy compliance data
+- **ServiceMonitor**: Prometheus Operator integration when enabled
+- **HTTPRoute**: Web UI access via Gateway API (policy-reporter.{domain})
+- **Kyverno Plugin**: Essential integration for policy violation reporting
 
 ### `argo_workflows.tf`
 Optionally deploys Argo Workflows for CI/CD:
@@ -121,14 +152,25 @@ Optionally deploys Argo Workflows for CI/CD:
 - **HTTPRoute**: Web UI access via Gateway API (argo-workflows.{domain})
 - **Storage**: Uses civo-volume storage class for persistence
 
-## Helm Deployments
+## Monitoring and Observability
 
-### `helm_argocd.tf`
-Installs and configures ArgoCD using Helm:
-- **GitOps Controller**: Core continuous deployment platform
-- **GitHub Integration**: Repository synchronization
-- **Web Interface**: Management UI and API access
-- **RBAC Configuration**: Secure access controls
+### `helm_prometheus_operator.tf`
+Deploys comprehensive monitoring stack:
+- **Prometheus Operator**: v61.9.0 kube-prometheus-stack for cloud-native monitoring
+- **Components**: Prometheus server, Alertmanager, Node Exporter, kube-state-metrics
+- **ServiceMonitor Support**: Automatic service discovery for metrics collection
+- **Cross-namespace Monitoring**: Deployed in dedicated monitoring namespace
+- **High Availability**: Resource limits and persistent storage configuration
+- **Istio Integration**: ServiceMonitor for Istio control plane metrics
+
+### `helm_metrics_server.tf`
+Installs Kubernetes Metrics Server:
+- **Version**: v3.12.1 for resource utilization metrics
+- **HPA Support**: Horizontal Pod Autoscaler metrics source
+- **Resource Monitoring**: CPU and memory usage for pods and nodes
+- **Dependencies**: Core infrastructure component for cluster operations
+
+## Helm Deployments
 
 ### `helm_cilium.tf`
 Upgrades Cilium CNI with advanced networking features:
@@ -153,8 +195,12 @@ Deploys Gloo Operator for Ambient Mesh:
 
 ### `helm_grafana.tf`
 Deploys Grafana for metrics visualization:
-- **Prometheus Integration**: Configured data source (http://prometheus-server)
-- **Dashboard Providers**: Istio and system dashboards
+- **Conditional Prometheus Integration**: Supports both basic and Prometheus Operator setups
+- **Pre-configured Dashboards**: 10 dashboards for comprehensive monitoring
+  - Kubernetes Cluster Monitoring (7249), Node Exporter Full (1860)
+  - Kubernetes Pods (6417), Istio Control Plane (7645), Istio Mesh (7639)
+  - Cilium Metrics (16611), Prometheus Stats (2), Kubernetes API Server (12006)
+  - Kube State Metrics (13332), Alertmanager (9578)
 - **Authentication**: Default admin/admin credentials
 - **Namespace**: Deployed in istio-system
 - **Kiali Integration**: Updates Kiali configuration for Grafana links
@@ -162,10 +208,11 @@ Deploys Grafana for metrics visualization:
 ### `helm_kiali.tf`
 Deploys Kiali for service mesh visualization:
 - **Istio Integration**: Service mesh topology and health
+- **Conditional Prometheus**: Supports both basic Prometheus and Prometheus Operator
 - **Grafana Integration**: External Grafana dashboard links
 - **Authentication**: Anonymous access for development
 - **Namespace**: Deployed in istio-system
-- **Prometheus**: Configured for metrics collection
+- **Gateway API Support**: Configured for Gateway API compatibility
 
 ### `helm_kubeblocks.tf`
 Deploys KubeBlocks database platform:
@@ -175,51 +222,80 @@ Deploys KubeBlocks database platform:
 - **Namespace**: Deployed in kb-system with proper labels
 - **CRD Management**: Separate CRD installation with 30s wait
 
+## Application Routing
+
+### `httproute_grafana.tf`
+Configures external access to Grafana:
+- **HTTPRoute**: Gateway API routing for grafana.{domain}
+- **Gateway Integration**: Uses default-gateway with TLS termination
+- **Cross-namespace Access**: ReferenceGrant for service access
+- **Dependencies**: Waits for Grafana deployment and Gateway availability
+
+### `httproute_kiali.tf`
+Configures external access to Kiali:
+- **HTTPRoute**: Gateway API routing for kiali.{domain}
+- **Service Mesh Access**: External access to Istio service mesh UI
+- **Gateway Integration**: Uses default-gateway with TLS termination
+- **Dependencies**: Waits for Kiali deployment and Gateway availability
+
 ## Deployment Summary
 
 This Terraform project creates a comprehensive Kubernetes platform with:
 
-1. **Core Infrastructure**: Civo Kubernetes cluster with Cilium CNI
+1. **Core Infrastructure**: Civo Kubernetes cluster with Cilium CNI and CSI snapshots
 2. **Modern Ingress**: Gateway API with Kgateway implementation
 3. **Service Mesh**: Istio Ambient Mesh via Gloo Operator
-4. **Observability**: Grafana, Kiali, Hubble UI for monitoring
-5. **Database Platform**: KubeBlocks with multiple database engines
-6. **CI/CD**: Optional Argo Workflows with event-driven automation
-7. **Security**: Cloudflare Origin Certificates and DNS proxying
-8. **Storage**: CSI snapshots for backup and restore capabilities
+4. **Policy Governance**: Kyverno policy engine with custom and pre-built policies
+5. **Monitoring Stack**: Prometheus Operator with comprehensive Grafana dashboards
+6. **Database Platform**: KubeBlocks with multiple database engines
+7. **CI/CD**: Optional Argo Workflows with event-driven automation
+8. **Security**: Cloudflare Origin Certificates and DNS proxying
+9. **Web Interfaces**: Policy Reporter UI for policy management
+10. **Storage**: CSI snapshots for backup and restore capabilities
 
 ## File Dependencies
 
 The deployment follows this dependency order:
-1. Core infrastructure (cluster, firewalls, delays)
-2. Networking (Cilium upgrade, Gateway API)
-3. Certificates and DNS configuration
-4. Service mesh (Gloo Operator, Ambient Mesh)
-5. Observability stack (Grafana, Kiali, Prometheus)
-6. Database platform (KubeBlocks)
-7. Optional CI/CD (Argo Workflows)
-8. Application routing (HTTPRoutes)
-
-All files are designed to work together as a cohesive infrastructure deployment with proper dependency management and error handling.
-- **Service Mesh Demo**: Showcases Ambient Mesh capabilities
-- **HTTPRoute**: External access configuration
-- **ArgoCD Integration**: GitOps-managed deployment
+1. **Core Infrastructure**: cluster, firewalls, delays, storage CRDs
+2. **Networking**: Cilium upgrade, Gateway API, certificates
+3. **DNS Configuration**: Cloudflare DNS and load balancer integration
+4. **Service Mesh**: Gloo Operator, Ambient Mesh deployment
+5. **Policy Engine**: Kyverno, policies, custom governance rules
+6. **Monitoring Stack**: Prometheus Operator or basic Prometheus, Metrics Server
+7. **Observability**: Grafana, Kiali with conditional configurations
+8. **Database Platform**: KubeBlocks with storage dependencies
+9. **Policy Management**: Policy Reporter UI with monitoring integration
+10. **Application Routing**: HTTPRoutes for external access
+11. **Optional CI/CD**: Argo Workflows with event-driven automation
 
 ## File Organization and Dependencies
 
 ### Execution Order
-1. **Foundation**: `cluster.tf`, `provider.tf` → `cluster_ready_delay.tf`
-2. **Networking**: `helm_cilium.tf` → `kgateway_api.tf` → `kgateway_certificate.tf`
-3. **DNS**: `cloudflare_dns.tf` (after Gateway load balancer)
-4. **Service Mesh**: `helm_gloo_operator.tf` → observability stack
-5. **GitOps**: `github.tf` → `helm_argocd.tf` → applications
-6. **Storage**: `csi-snapshot-crds.tf` → `civo-volumesnapshotclass.tf` → `helm_kubeblocks.tf`
-7. **CI/CD**: `argo_workflows.tf` (optional, after ArgoCD)
+1. **Foundation**: `cluster.tf`, `provider.tf` → `cluster_ready_delay.tf` → `kubectl_dependencies.tf`
+2. **Storage**: `csi-snapshot-crds.tf` → `civo-volumesnapshotclass.tf`
+3. **Networking**: `helm_cilium.tf` → `kgateway_api.tf` → `kgateway_certificate.tf`
+4. **DNS**: `cloudflare_dns.tf` (after Gateway load balancer)
+5. **Service Mesh**: `helm_gloo_operator.tf` → observability stack
+6. **Policy Engine**: `helm_kyverno.tf` → `helm_kyverno_policies.tf` → `kyverno_custom_policies.tf`
+7. **Monitoring**: `helm_prometheus_operator.tf` | `helm_metrics_server.tf`
+8. **Observability**: `helm_grafana.tf`, `helm_kiali.tf` (conditional Prometheus integration)
+9. **Database Platform**: `helm_kubeblocks.tf` (after storage and policies)
+10. **Policy Management**: `httproute_kyverno.tf` (Policy Reporter with conditional monitoring)
+11. **Application Routing**: `httproute_grafana.tf`, `httproute_kiali.tf`
+12. **Optional Workflows**: `argo_workflows.tf` (after all core components)
 
 ### Critical Dependencies
-- All Helm charts depend on `cluster_ready_delay.tf`
-- HTTPRoutes depend on Gateway deployment and certificate availability
-- Service mesh components have carefully orchestrated timing
-- GitOps applications require GitHub repository and ArgoCD installation
+- **All Helm charts** depend on `cluster_ready_delay.tf` and `kubectl_dependencies.tf`
+- **HTTPRoutes** depend on Gateway deployment and certificate availability
+- **Policy Reporter** has conditional dependencies based on monitoring stack choice
+- **Service mesh components** have carefully orchestrated timing with Cilium compatibility
+- **Kyverno policies** must be deployed after policy engine with proper webhook readiness
+- **Monitoring stack** supports both basic and operator-based architectures
 
-This modular approach ensures reliable, repeatable infrastructure deployments with clear separation of concerns and proper dependency management.
+### Conditional Architecture Support
+- **Prometheus**: Basic (`helm_kiali.tf` fallback) vs Operator (`helm_prometheus_operator.tf`)
+- **Policy Enforcement**: Optional Kyverno deployment with policy exclusions
+- **Policy Reporting**: Conditional ServiceMonitor based on monitoring stack
+- **Workflow Automation**: Optional Argo Workflows deployment
+
+This modular approach ensures reliable, repeatable infrastructure deployments with clear separation of concerns, proper dependency management, and support for both basic and advanced configurations.

@@ -32,7 +32,7 @@ resource "null_resource" "cilium_upgrade" {
 }
 ```
 
-The `triggers` block ensures that the resource is recreated when the Cilium version changes, allowing for future upgrades.
+The `triggers` block ensures that the resource is recreated when the Cilium version changes, enabling version upgrades when needed.
 
 ## Configuration Options
 
@@ -108,12 +108,6 @@ cilium status --wait
 3. **Automation**: Upgrades can be part of your CI/CD pipeline
 4. **Flexibility**: Direct Helm commands allow for complex upgrade scenarios
 
-## Future Considerations
-
-1. **Cilium Network Policies**: Consider implementing network policies for enhanced security
-2. **Cilium Service Mesh**: Evaluate Cilium's service mesh capabilities as an alternative to Istio/Linkerd
-3. **eBPF Maps**: Monitor eBPF map usage for performance optimization
-4. **Hubble Metrics**: Set up Grafana dashboards for Hubble metrics
 
 ## References
 

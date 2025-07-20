@@ -379,19 +379,6 @@ helm install kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-cr
 kubectl api-resources | grep gateway
 ```
 
-### 3.6. Future AI Gateway Integration
-
-**Problem:** Preparing for AI Gateway integration for LLM traffic.
-
-**Considerations:**
-* AI Gateway will use the same Gateway API infrastructure but with specialized routes and backends
-* May require additional configuration for rate limiting, authentication, and authorization
-* Will need to ensure proper routing based on traffic type (web vs. LLM)
-
-**Preparation:**
-* Ensure current Gateway API implementation is stable and well-understood
-* Plan for separate HTTPRoutes for AI traffic with appropriate security measures
-* Consider namespace isolation for AI components
 
 ## All-in-One Troubleshooting Script
 

@@ -55,7 +55,7 @@ kubectl get pods -A
 
 ### Optional Components
 - **Argo Workflows + Events**: Event-driven workflow automation platform (controlled by `enable_argo_workflows`)
-- **Istio Ambient Mesh**: Service mesh prepared for future implementation
+- **Istio Ambient Mesh**: Service mesh integration (optional component)
 
 ### Execution Dependencies
 
