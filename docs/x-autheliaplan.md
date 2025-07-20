@@ -12,6 +12,7 @@ The cluster currently exposes several internal tools without authentication:
 - **Grafana Dashboards**: `https://grafana.timbersedgearb.com` (Monitoring and metrics)
 - **Argo Workflows UI**: `https://argo-workflows.timbersedgearb.com` (Workflow management)
 
+
 These tools contain sensitive cluster information and administrative capabilities that require proper authentication and authorization.
 
 ## Solution Architecture
@@ -45,247 +46,188 @@ Authelia provides:
                                               └─────────────────┘
 ```
 
-## Implementation Plan
+## Implementation Plan (Revised)
 
-### Phase 1: Infrastructure Foundation
+This revised plan incorporates lessons learned from the ZenML deployment, focusing on automation, security, and modularity. It replaces insecure defaults with automated secret generation and ensures a robust, GitOps-aligned deployment.
 
-#### 1.1 Add Configuration Variables (`io.tf`)
+### Phase 1: Create `authelia.tf`
+
+All Authelia-related resources will be encapsulated in a new `authelia.tf` file.
 
 ```hcl
-# Authelia Authentication Configuration
-variable "enable_authelia" {
-  description = "Whether to deploy Authelia authentication system"
-  type        = bool
-  default     = true
-}
+# authelia.tf
 
-variable "authelia_chart_version" {
-  description = "Version of the Authelia Helm chart"
-  type        = string
-  default     = "0.9.3"  # Latest stable version
-}
-
-variable "authelia_namespace" {
-  description = "Namespace for Authelia components"
-  type        = string
-  default     = "authelia-system"
-}
-
-variable "authelia_session_secret" {
-  description = "Secret key for Authelia session encryption (32+ chars)"
-  type        = string
-  sensitive   = true
-  default     = "insecure_session_secret_change_me_in_production"
-}
-
-variable "authelia_jwt_secret" {
-  description = "Secret key for Authelia JWT tokens (32+ chars)"
-  type        = string
-  sensitive   = true
-  default     = "insecure_jwt_secret_change_me_in_production"
-}
-
-variable "authelia_storage_secret" {
-  description = "Secret key for Authelia storage encryption (32+ chars)"
-  type        = string
-  sensitive   = true
-  default     = "insecure_storage_secret_change_me_in_production"
-}
-
-variable "authelia_users" {
-  description = "List of Authelia users with passwords (bcrypt hashed)"
-  type = list(object({
-    username    = string
-    displayname = string
-    password    = string  # bcrypt hash
-    email       = string
-    groups      = list(string)
-  }))
-  default = [
-    {
-      username    = "admin"
-      displayname = "Administrator"
-      password    = "$2a$14$jmcHqHMcsrbwpTmO8HO7Nu.pQyT7mfx2jUYvmvI3k.Y8uJd0YE1M2"  # "password"
-      email       = "admin@timbersedgearb.com"
-      groups      = ["admins", "dev"]
+# 1. Create a dedicated namespace for Authelia
+resource "kubernetes_namespace" "authelia" {
+  count = var.enable_authelia ? 1 : 0
+  metadata {
+    name = var.authelia_namespace
+    labels = {
+      "app.kubernetes.io/name"    = "authelia"
+      "istio.io/dataplane-mode" = "ambient"
     }
-  ]
-  sensitive = true
-}
-
-variable "authelia_redis_password" {
-  description = "Password for Redis session storage"
-  type        = string
-  sensitive   = true
-  default     = "change_me_redis_password_in_production"
-}
-
-variable "authelia_storage_type" {
-  description = "Storage backend type for Authelia (sqlite or postgres)"
-  type        = string
-  default     = "postgres"
-  validation {
-    condition     = contains(["sqlite", "postgres"], var.authelia_storage_type)
-    error_message = "Storage type must be either 'sqlite' or 'postgres'."
   }
 }
 
-variable "authelia_postgres_password" {
-  description = "Password for PostgreSQL database (when using postgres storage)"
-  type        = string
-  sensitive   = true
-  default     = "change_me_postgres_password_in_production"
+# 2. Generate all necessary secrets dynamically
+resource "random_password" "authelia_jwt_secret" {
+  count   = var.enable_authelia ? 1 : 0
+  length  = 64
+  special = false
 }
-```
 
-#### 1.2 Create Database Infrastructure with KubeBlocks
+resource "random_password" "authelia_session_secret" {
+  count   = var.enable_authelia ? 1 : 0
+  length  = 64
+  special = false
+}
 
-```hcl
-# KubeBlocks Redis Cluster for Authelia session storage
-resource "kubectl_manifest" "authelia_redis_cluster" {
+resource "random_password" "authelia_storage_encryption_key" {
+  count   = var.enable_authelia ? 1 : 0
+  length  = 64
+  special = false
+}
+
+resource "random_password" "authelia_postgres_password" {
+  count   = var.enable_authelia ? 1 : 0
+  length  = 24
+  special = false
+}
+
+resource "random_password" "authelia_redis_password" {
+  count   = var.enable_authelia ? 1 : 0
+  length  = 24
+  special = false
+}
+
+resource "random_password" "authelia_admin_password" {
+  count   = var.enable_authelia ? 1 : 0
+  length  = 24
+  special = false
+}
+
+# Hash the admin password using bcrypt (required by Authelia)
+resource "bcrypt_hash" "authelia_admin_password_hash" {
+  count      = var.enable_authelia ? 1 : 0
+  cleartext  = random_password.authelia_admin_password[0].result
+  cost       = 12
+}
+
+# 3. Create secrets for the database passwords
+resource "kubernetes_secret" "authelia_postgres_creds" {
   count = var.enable_authelia ? 1 : 0
-  yaml_body = <<-YAML
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: kb-psa-authelia-redis
-  namespace: ${var.authelia_namespace}
----
-apiVersion: apps.kubeblocks.io/v1
-kind: Cluster
-metadata:
-  name: authelia-redis
-  namespace: ${var.authelia_namespace}
-  labels:
-    app.kubernetes.io/name: authelia-redis
-    app.kubernetes.io/part-of: authelia
-spec:
-  clusterDef: redis
-  terminationPolicy: Halt  # Preserve data for session storage
-  componentSpecs:
-    - name: redis
-      componentDef: redis
-      replicas: 1  # Single instance for session storage
-      serviceAccountName: kb-psa-authelia-redis
-      resources:
-        limits:
-          cpu: 200m
-          memory: 256Mi
-        requests:
-          cpu: 50m
-          memory: 128Mi
-      volumeClaimTemplates:
-        - name: data
-          spec:
-            accessModes:
-              - ReadWriteOnce
-            resources:
-              requests:
-                storage: 2Gi  # Sufficient for session storage
-YAML
-
-  depends_on = [
-    helm_release.kubeblocks,
-    kubernetes_namespace.authelia_namespace
-  ]
+  metadata {
+    name      = "authelia-postgres-auth"
+    namespace = var.authelia_namespace
+  }
+  data = {
+    "password" = random_password.authelia_postgres_password[0].result
+    "username" = "authelia"
+  }
 }
 
-# KubeBlocks PostgreSQL Cluster for Authelia data storage (optional)
+resource "kubernetes_secret" "authelia_redis_creds" {
+  count = var.enable_authelia ? 1 : 0
+  metadata {
+    name      = "authelia-redis-auth"
+    namespace = var.authelia_namespace
+  }
+  data = {
+    "password" = random_password.authelia_redis_password[0].result
+  }
+}
+
+# 4. Provision backend databases using KubeBlocks
 resource "kubectl_manifest" "authelia_postgres_cluster" {
-  count = var.enable_authelia && var.authelia_storage_type == "postgres" ? 1 : 0
-  yaml_body = <<-YAML
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: kb-psa-authelia-postgres
-  namespace: ${var.authelia_namespace}
----
+  count      = var.enable_authelia ? 1 : 0
+  yaml_body  = <<-YAML
 apiVersion: apps.kubeblocks.io/v1
 kind: Cluster
 metadata:
   name: authelia-postgres
   namespace: ${var.authelia_namespace}
-  labels:
-    app.kubernetes.io/name: authelia-postgres
-    app.kubernetes.io/part-of: authelia
 spec:
-  clusterDef: postgresql
-  terminationPolicy: Halt  # Preserve authentication data
+  clusterDefinitionRef: postgresql
+  clusterVersionRef: postgresql-16.2.0
   componentSpecs:
-    - name: postgresql
-      componentDef: postgresql
-      replicas: 1  # Single instance for authentication storage
-      serviceAccountName: kb-psa-authelia-postgres
-      resources:
-        limits:
-          cpu: 200m
-          memory: 256Mi
-        requests:
-          cpu: 100m
-          memory: 256Mi
-      volumeClaimTemplates:
-        - name: data
-          spec:
-            accessModes:
-              - ReadWriteOnce
-            resources:
-              requests:
-                storage: 5Gi  # Authentication data storage
+  - name: postgresql
+    componentDefRef: postgresql
+    replicas: 1
+    # This tells KubeBlocks to use the secret we created for the initial user/password.
+    # The user 'authelia' will be created with the password from the secret.
+    userPasswordSecret:
+      name: ${kubernetes_secret.authelia_postgres_creds[0].metadata[0].name}
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+    storage:
+      name: data
+      storageClassName: civo-volume
+      size: 5Gi
+  terminationPolicy: WipeOut
 YAML
-
-  depends_on = [
-    helm_release.kubeblocks,
-    kubernetes_namespace.authelia_namespace
-  ]
+  depends_on = [helm_release.kubeblocks, kubernetes_namespace.authelia, kubernetes_secret.authelia_postgres_creds]
 }
 
-# Wait for database clusters to be ready
-resource "time_sleep" "wait_for_authelia_databases" {
-  count = var.enable_authelia ? 1 : 0
-  depends_on = [
-    kubectl_manifest.authelia_redis_cluster,
-    kubectl_manifest.authelia_postgres_cluster
-  ]
-  create_duration = "120s"  # KubeBlocks clusters need time to initialize
+resource "kubectl_manifest" "authelia_redis_cluster" {
+  count      = var.enable_authelia ? 1 : 0
+  yaml_body  = <<-YAML
+apiVersion: apps.kubeblocks.io/v1
+kind: Cluster
+metadata:
+  name: authelia-redis
+  namespace: ${var.authelia_namespace}
+spec:
+  clusterDefinitionRef: redis
+  clusterVersionRef: redis-7.2.4
+  componentSpecs:
+  - name: redis
+    componentDefRef: redis
+    replicas: 1
+    # Use the generated password for the Redis instance
+    userPasswordSecret:
+      name: ${kubernetes_secret.authelia_redis_creds[0].metadata[0].name}
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+    storage:
+      name: data
+      storageClassName: civo-volume
+      size: 2Gi
+  terminationPolicy: WipeOut
+YAML
+  depends_on = [helm_release.kubeblocks, kubernetes_namespace.authelia, kubernetes_secret.authelia_redis_creds]
 }
 
-# Create namespace for Authelia
-resource "kubernetes_namespace" "authelia_namespace" {
-  count = var.enable_authelia ? 1 : 0
-  metadata {
-    name = var.authelia_namespace
-    labels = {
-      "app.kubernetes.io/name" = "authelia"
-      "app.kubernetes.io/part-of" = "authelia"
-    }
-  }
-}
-
-# Authelia configuration secret
+# 5. Create the main Authelia configuration as a Kubernetes secret
+# This includes templating the generated secrets and user credentials.
 resource "kubernetes_secret" "authelia_config" {
   count = var.enable_authelia ? 1 : 0
   metadata {
     name      = "authelia-config"
     namespace = var.authelia_namespace
   }
-  
+
   data = {
     "users_database.yml" = yamlencode({
       users = {
-        for user in var.authelia_users : user.username => {
-          displayname = user.displayname
-          password    = user.password
-          email       = user.email
-          groups      = user.groups
+        "admin" = {
+          displayname = "Administrator"
+          # Use bcrypt-hashed password as required by Authelia
+          password    = bcrypt_hash.authelia_admin_password_hash[0].hash
+          email       = "admin@${var.domain_name}"
+          groups      = ["admins", "dev"]
         }
       }
     })
-    
+
     "configuration.yml" = yamlencode({
       theme = "auto"
-      jwt_secret = var.authelia_jwt_secret
-      default_redirection_url = "https://policy-reporter.${var.domain_name}"
-      
+      jwt_secret = random_password.authelia_jwt_secret[0].result
+      default_redirection_url = "https://auth.${var.domain_name}"
+
       server = {
         host = "0.0.0.0"
         port = 9091
@@ -293,25 +235,20 @@ resource "kubernetes_secret" "authelia_config" {
         enable_pprof = false
         enable_expvars = false
         disable_healthcheck = false
-        tls = {
-          key = ""
-          certificate = ""
-        }
       }
-      
+
       log = {
         level = "info"
         format = "text"
-        file_path = ""
         keep_stdout = true
       }
-      
+
       totp = {
-        issuer = "timbersedgearb.com"
+        issuer = var.domain_name
         period = 30
         skew = 1
       }
-      
+
       authentication_backend = {
         file = {
           path = "/config/users_database.yml"
@@ -324,7 +261,7 @@ resource "kubernetes_secret" "authelia_config" {
           }
         }
       }
-      
+
       access_control = {
         default_policy = "deny"
         rules = [
@@ -350,48 +287,42 @@ resource "kubernetes_secret" "authelia_config" {
           }
         ]
       }
-      
+
       session = {
         name = "authelia_session"
-        secret = var.authelia_session_secret
+        secret = random_password.authelia_session_secret[0].result
         expiration = "12h"
         inactivity = "45m"
         remember_me_duration = "1M"
-        
         redis = {
           host = "authelia-redis-redis.${var.authelia_namespace}.svc.cluster.local"
           port = 6379
-          password = var.authelia_redis_password
+          password = kubernetes_secret.authelia_redis_creds[0].data.password
           database_index = 0
           maximum_active_connections = 8
           minimum_idle_connections = 0
         }
       }
-      
+
       regulation = {
         max_retries = 3
         find_time = "2m"
         ban_time = "5m"
       }
-      
-      storage = var.authelia_storage_type == "postgres" ? {
-        encryption_key = var.authelia_storage_secret
+
+      storage = {
+        encryption_key = random_password.authelia_storage_encryption_key[0].result
         postgres = {
           host = "authelia-postgres-postgresql.${var.authelia_namespace}.svc.cluster.local"
           port = 5432
           database = "authelia"
           schema = "public"
-          username = "postgres"
-          password = var.authelia_postgres_password
+          username = kubernetes_secret.authelia_postgres_creds[0].data.username
+          password = kubernetes_secret.authelia_postgres_creds[0].data.password
           timeout = "5s"
         }
-      } : {
-        encryption_key = var.authelia_storage_secret
-        local = {
-          path = "/config/db.sqlite3"
-        }
       }
-      
+
       notifier = {
         disable_startup_check = true
         filesystem = {
@@ -400,14 +331,10 @@ resource "kubernetes_secret" "authelia_config" {
       }
     })
   }
-  
-  depends_on = [
-    kubectl_manifest.authelia_redis_cluster,
-    kubernetes_namespace.authelia_namespace
-  ]
+  depends_on = [kubectl_manifest.authelia_redis_cluster, kubectl_manifest.authelia_postgres_cluster]
 }
 
-# Authelia main deployment
+# 6. Deploy Authelia using the official Helm chart
 resource "helm_release" "authelia" {
   count      = var.enable_authelia ? 1 : 0
   name       = "authelia"
@@ -415,11 +342,14 @@ resource "helm_release" "authelia" {
   chart      = "authelia"
   version    = var.authelia_chart_version
   namespace  = var.authelia_namespace
-  create_namespace = true
-  
+
   values = [
     yamlencode({
-      domain = var.domain_name
+      image = {
+        registry = "ghcr.io"
+        repository = "authelia/authelia"
+        tag = "4.38.8"
+      }
       
       pod = {
         kind = "Deployment"
@@ -444,11 +374,18 @@ resource "helm_release" "authelia" {
       }
       
       configMap = {
-        enabled = false  # Using manual secret
+        enabled = false
       }
       
       secret = {
-        existingSecret = "authelia-config"
+        existingSecret = kubernetes_secret.authelia_config[0].metadata[0].name
+        subPath = "configuration.yml"
+        additionalSecrets = [
+          {
+            name = kubernetes_secret.authelia_config[0].metadata[0].name
+            subPath = "users_database.yml"
+          }
+        ]
       }
       
       service = {
@@ -458,7 +395,7 @@ resource "helm_release" "authelia" {
       }
       
       ingress = {
-        enabled = false  # Using Gateway API
+        enabled = false
       }
       
       persistence = {
@@ -469,106 +406,18 @@ resource "helm_release" "authelia" {
       }
     })
   ]
-  
-  depends_on = [
-    kubernetes_secret.authelia_config,
-    time_sleep.wait_for_authelia_databases
-  ]
+  depends_on = [kubernetes_secret.authelia_config, kubectl_manifest.authelia_redis_cluster, kubectl_manifest.authelia_postgres_cluster]
 }
-```
 
-### Phase 2: Kyverno Policy Updates
-
-#### 2.1 Update Policy Exclusions (`kyverno_custom_policies.tf`)
-
-```hcl
-# Update resource requirements policy to exclude authelia-system
-resource "kubectl_manifest" "kyverno_resource_requirements" {
-  count = var.enable_kyverno ? 1 : 0
-  yaml_body = <<-YAML
-apiVersion: kyverno.io/v1
-kind: ClusterPolicy
-metadata:
-  name: require-resource-requests
-spec:
-  # ... existing configuration ...
-  rules:
-  - name: check-container-resources
-    exclude:
-      any:
-      # Exclude system namespaces (updated)
-      - resources:
-          namespaces: 
-          - kube-system
-          - kyverno
-          - kgateway-system
-          - local-path-storage
-          - istio-system
-          - monitoring
-          - policy-reporter
-          - authelia-system  # Add authelia exclusion
-      # ... rest of existing configuration ...
-YAML
-}
-```
-
-#### 2.2 Create Authelia-Specific Policies
-
-```hcl
-# Authelia Configuration Validation Policy
-resource "kubectl_manifest" "kyverno_authelia_config_policy" {
-  count = var.enable_kyverno && var.enable_authelia ? 1 : 0
-  yaml_body = <<-YAML
-apiVersion: kyverno.io/v1
-kind: ClusterPolicy
-metadata:
-  name: authelia-configuration-standards
-  annotations:
-    policies.kyverno.io/title: Authelia Configuration Standards
-    policies.kyverno.io/category: Security
-    policies.kyverno.io/severity: high
-    policies.kyverno.io/subject: Secret
-    policies.kyverno.io/description: >-
-      Ensures Authelia configuration secrets follow security best practices
-      including proper secret rotation and encryption key management.
-spec:
-  validationFailureAction: enforce
-  background: true
-  rules:
-  - name: validate-authelia-secrets
-    match:
-      any:
-      - resources:
-          kinds:
-          - Secret
-          namespaces:
-          - authelia-system
-          names:
-          - "authelia-*"
-    validate:
-      message: "Authelia secrets must be properly formatted"
-      pattern:
-        type: "Opaque"
-        data:
-          "configuration.yml": "?*"
-YAML
-}
-```
-
-### Phase 3: Gateway API SecurityPolicy Integration
-
-#### 3.1 Create Authelia HTTPRoute
-
-```hcl
-# Authelia authentication portal HTTPRoute
-resource "kubectl_manifest" "authelia_httproute" {
-  count = var.enable_authelia ? 1 : 0
-  yaml_body = <<-YAML
+# 7. Create Gateway API HTTPRoute for the Authelia portal
+resource "kubectl_manifest" "httproute_authelia" {
+  count      = var.enable_authelia ? 1 : 0
+  yaml_body  = <<-YAML
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: authelia-portal
-  namespace: default
+  name: authelia
+  namespace: ${var.authelia_namespace}
   annotations:
     kyverno.io/policy-exempt: "true"
 spec:
@@ -586,20 +435,16 @@ spec:
     backendRefs:
     - name: authelia
       namespace: ${var.authelia_namespace}
-      port: 80
+      port: 9091
       kind: Service
 YAML
-  
-  depends_on = [
-    helm_release.authelia,
-    kubectl_manifest.default_gateway
-  ]
+  depends_on = [helm_release.authelia, kubectl_manifest.default_gateway]
 }
 
-# ReferenceGrant for Authelia service access
-resource "kubectl_manifest" "authelia_reference_grant" {
-  count = var.enable_authelia ? 1 : 0
-  yaml_body = <<-YAML
+# 8. Create ReferenceGrant to allow cross-namespace routing
+resource "kubectl_manifest" "refgrant_authelia" {
+  count      = var.enable_authelia ? 1 : 0
+  yaml_body  = <<-YAML
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: ReferenceGrant
 metadata:
@@ -609,70 +454,40 @@ spec:
   from:
   - group: gateway.networking.k8s.io
     kind: HTTPRoute
-    namespace: default
+    namespace: ${var.authelia_namespace}
   to:
   - group: ""
     kind: Service
     name: authelia
 YAML
-  
-  depends_on = [
-    helm_release.authelia
-  ]
 }
-```
 
-#### 3.2 Create SecurityPolicy for Policy Reporter
-
-```hcl
-# SecurityPolicy for Policy Reporter authentication
-resource "kubectl_manifest" "policy_reporter_security_policy" {
-  count = var.enable_authelia && var.enable_policy_reporter_ui ? 1 : 0
-  yaml_body = <<-YAML
-apiVersion: gateway.envoyproxy.io/v1alpha1
+# 9. Create SecurityPolicy to protect Grafana
+resource "kubectl_manifest" "secpolicy_grafana" {
+  count      = var.enable_authelia && var.enable_grafana ? 1 : 0
+  yaml_body  = <<-YAML
+apiVersion: gateway.networking.k8s.io/v1alpha2
 kind: SecurityPolicy
 metadata:
-  name: policy-reporter-auth
-  namespace: default
+  name: grafana-auth
+  namespace: ${var.monitoring_namespace}
 spec:
   targetRef:
     group: gateway.networking.k8s.io
     kind: HTTPRoute
-    name: policy-reporter-ui
+    name: grafana-http
   extAuth:
     http:
-      headersToBackend:
-      - "Remote-User"
-      - "Remote-Groups"
-      - "Remote-Name"
-      - "Remote-Email"
-      service:
+      serviceRef:
         name: authelia
         namespace: ${var.authelia_namespace}
-        port: 80
-      path: "/api/authz/forward-auth"
-      headersToAdd:
-      - name: "X-Forwarded-Proto"
-        value: "https"
-      - name: "X-Forwarded-Host"
-        value: "policy-reporter.${var.domain_name}"
-      - name: "X-Forwarded-Uri"
-        value: "/"
+        port: 9091
+      path: /api/authz/forward-auth
 YAML
-  
-  depends_on = [
-    helm_release.authelia,
-    kubectl_manifest.policy_reporter_httproute
-  ]
+  depends_on = [helm_release.authelia, helm_release.grafana]
 }
-```
 
-### Phase 4: Monitoring Integration
-
-#### 4.1 Add ServiceMonitor for Authelia
-
-```hcl
-# ServiceMonitor for Authelia metrics (when Prometheus Operator is enabled)
+# 10. Create ServiceMonitor for Prometheus
 resource "kubectl_manifest" "authelia_servicemonitor" {
   count = var.enable_authelia && var.enable_prometheus_operator ? 1 : 0
   yaml_body = <<-YAML
@@ -680,70 +495,161 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: authelia
-  namespace: ${var.authelia_namespace}
+  namespace: ${var.monitoring_namespace}
   labels:
-    app.kubernetes.io/name: authelia
+    release: kube-prometheus-stack
 spec:
   selector:
     matchLabels:
       app.kubernetes.io/name: authelia
+  namespaceSelector:
+    matchNames:
+    - ${var.authelia_namespace}
   endpoints:
   - port: http
-    path: /metrics
+    path: /api/metrics
     interval: 30s
-    scrapeTimeout: 10s
 YAML
-  
-  depends_on = [
-    helm_release.authelia,
-    time_sleep.wait_for_prometheus_operator
-  ]
+  depends_on = [helm_release.authelia]
+}
+
+# 11. Update Kyverno policies to exclude authelia-system namespace
+resource "kubectl_manifest" "kyverno_authelia_exclusion" {
+  count = var.enable_authelia && var.enable_kyverno ? 1 : 0
+  yaml_body = <<-YAML
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-resource-requests-updated
+  annotations:
+    policies.kyverno.io/title: Require Resource Requests (Updated for Authelia)
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Pod
+spec:
+  validationFailureAction: enforce
+  background: true
+  rules:
+  - name: check-container-resources
+    match:
+      any:
+      - resources:
+          kinds:
+          - Pod
+    exclude:
+      any:
+      - resources:
+          namespaces: 
+          - kube-system
+          - kyverno
+          - kgateway-system
+          - local-path-storage
+          - istio-system
+          - monitoring
+          - policy-reporter
+          - ${var.authelia_namespace}  # Add Authelia namespace exclusion
+      - resources:
+          selector:
+            matchLabels:
+              workload-type: debug
+      - resources:
+          selector:
+            matchLabels:
+              workload-type: temporary
+    validate:
+      message: "Production containers should specify CPU and memory requests."
+      anyPattern:
+      - spec:
+          containers:
+          - resources:
+              requests:
+                cpu: "?*"
+                memory: "?*"
+      - metadata:
+          annotations:
+            policy.kyverno.io/exempt-resource-requests: "true"
+YAML
+  depends_on = [helm_release.kyverno]
 }
 ```
 
-### Phase 5: Tool-Specific Extensions
+### Phase 2: Add Required Provider and Update Variables
 
-#### 5.1 Grafana Authentication Headers
+**Add bcrypt provider to `provider.tf`:**
 
 ```hcl
-# Update Grafana configuration for auth proxy headers
-# Add to helm_grafana.tf values:
-set {
-  name  = "grafana.ini.auth\\.proxy.enabled"
-  value = var.enable_authelia ? "true" : "false"
+terraform {
+  required_providers {
+    # ... existing providers ...
+    bcrypt = {
+      source  = "viktorradnai/bcrypt"
+      version = "~> 0.1.2"
+    }
+  }
 }
 
-set {
-  name  = "grafana.ini.auth\\.proxy.header_name"
-  value = "Remote-User"
-}
-
-set {
-  name  = "grafana.ini.auth\\.proxy.header_property"
-  value = "username"
-}
-
-set {
-  name  = "grafana.ini.auth\\.proxy.auto_sign_up"
-  value = var.enable_authelia ? "true" : "false"
-}
+provider "bcrypt" {}
 ```
 
-#### 5.2 Kiali Authentication Integration
+**Add new variables to `io.tf`:**
 
 ```hcl
-# Update Kiali configuration for external authentication
-# Add to helm_kiali.tf values:
-set {
-  name  = "auth.strategy"
-  value = var.enable_authelia ? "header" : "anonymous"
+# Authelia Authentication
+variable "enable_authelia" {
+  description = "Whether to deploy the Authelia authentication system"
+  type        = bool
+  default     = false
 }
 
-set {
-  name  = "auth.header"
-  value = var.enable_authelia ? "Remote-User" : ""
+variable "authelia_chart_version" {
+  description = "Version of the Authelia Helm chart"
+  type        = string
+  default     = "0.9.3"
+}
+
+variable "authelia_namespace" {
+  description = "Namespace for Authelia components"
+  type        = string
+  default     = "authelia-system"
 }
 ```
+
+**Add new outputs to `outputs.tf`:**
+
+```hcl
+# outputs.tf
+
+output "authelia_portal_url" {
+  description = "URL for the Authelia login portal."
+  value       = var.enable_authelia ? "https://auth.${var.domain_name}" : "Authelia is disabled."
+}
+
+output "authelia_initial_admin_password" {
+  description = "The generated initial password for the 'admin' user. Use this to log in for the first time."
+  value       = var.enable_authelia ? random_password.authelia_admin_password[0].result : "Authelia is disabled."
+  sensitive   = true
+}
+```
+
+### Phase 3: Pre-Deployment Verification
+
+**IMPORTANT: Verify SecurityPolicy API Version**
+Before deploying, verify that Kgateway supports the SecurityPolicy API version used in the plan:
+
+```bash
+kubectl api-resources | grep securitypolicy
+kubectl api-versions | grep gateway
+```
+
+If `gateway.networking.k8s.io/v1alpha2` is not available, update the SecurityPolicy resources to use the correct API version supported by your Kgateway installation.
+
+### Phase 4: Deployment & Documentation
+
+1.  **Enable Authelia:** Set `enable_authelia = true` in `terraform.tfvars`.
+2.  **Apply Changes:** Run `terraform apply`.
+3.  **Check Outputs:** Note the `authelia_portal_url` and the sensitive `authelia_initial_admin_password`.
+4.  **Test Login:** Access a protected service (e.g., Grafana). You should be redirected to the Authelia portal. Log in with username `admin` and the generated password.
+5.  **Update Documentation:** After successful testing, update `versions.md`, `terraform_files_documentation.md`, and `order_of_execution.md`.
 
 ## Security Considerations
 
