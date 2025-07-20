@@ -237,6 +237,8 @@ spec:
           - kgateway-system
           - local-path-storage
           - istio-system
+          - monitoring
+          - policy-reporter
       # Exclude debug and temporary workloads
       - resources:
           selector:

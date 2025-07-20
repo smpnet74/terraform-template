@@ -3,7 +3,7 @@ resource "helm_release" "kiali" {
   repository = "https://kiali.org/helm-charts"
   chart      = "kiali-server"
   namespace  = "istio-system"
-  create_namespace = false
+  create_namespace = true
   
   set {
     name  = "auth.strategy"
@@ -17,7 +17,7 @@ resource "helm_release" "kiali" {
   
   set {
     name  = "external_services.prometheus.url"
-    value = "http://prometheus-server.istio-system:80"
+    value = var.enable_prometheus_operator ? "http://kube-prometheus-stack-prometheus.${var.monitoring_namespace}:9090" : "http://prometheus-server.istio-system:80"
   }
   
   # Configure Grafana integration
@@ -54,11 +54,12 @@ resource "helm_release" "kiali" {
 }
 
 resource "helm_release" "prometheus" {
+  count      = var.enable_prometheus_operator ? 0 : 1  # Only deploy when Prometheus Operator is disabled
   name       = "prometheus"
   repository = "https://prometheus-community.github.io/helm-charts"
   chart      = "prometheus"
   namespace  = "istio-system"
-  create_namespace = false
+  create_namespace = true
   
   set {
     name  = "server.persistentVolume.enabled"
@@ -83,15 +84,17 @@ resource "helm_release" "prometheus" {
 
 # Add a wait for Prometheus to be ready before installing Kiali
 resource "time_sleep" "wait_for_prometheus" {
-  depends_on = [helm_release.prometheus]
+  count = var.enable_prometheus_operator ? 0 : 1  # Only when old Prometheus is deployed
+  depends_on = [helm_release.prometheus[0]]
   create_duration = "30s"
 }
 
 # Update Kiali to depend on Prometheus
 resource "null_resource" "kiali_depends_on_prometheus" {
+  count = var.enable_prometheus_operator ? 0 : 1  # Only needed for old Prometheus setup
   depends_on = [
-    helm_release.prometheus,
-    time_sleep.wait_for_prometheus,
+    helm_release.prometheus[0],
+    time_sleep.wait_for_prometheus[0],
     helm_release.kiali
   ]
 }

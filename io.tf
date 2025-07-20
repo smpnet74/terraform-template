@@ -135,5 +135,36 @@ variable "kyverno_policy_exclusions" {
   default     = ["kube-system", "kyverno", "kgateway-system", "local-path-storage"]
 }
 
+variable "enable_policy_reporter_ui" {
+  description = "Whether to deploy Policy Reporter UI for web-based policy management"
+  type        = bool
+  default     = true
+}
+
+variable "policy_reporter_chart_version" {
+  description = "Version of the Policy Reporter Helm chart"
+  type        = string
+  default     = "2.22.0"  # Latest stable version with UI support
+}
+
+# Prometheus Operator Configuration
+variable "enable_prometheus_operator" {
+  description = "Whether to deploy Prometheus Operator for cluster monitoring"
+  type        = bool
+  default     = true
+}
+
+variable "prometheus_operator_chart_version" {
+  description = "Version of the kube-prometheus-stack Helm chart"
+  type        = string
+  default     = "61.9.0"  # Latest stable version
+}
+
+variable "monitoring_namespace" {
+  description = "Namespace for monitoring components (Prometheus, Grafana, Alertmanager)"
+  type        = string
+  default     = "monitoring"
+}
+
 
 # Output

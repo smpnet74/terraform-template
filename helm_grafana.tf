@@ -3,7 +3,7 @@ resource "helm_release" "grafana" {
   repository = "https://grafana.github.io/helm-charts"
   chart      = "grafana"
   namespace  = "istio-system"
-  create_namespace = false
+  create_namespace = true
   
   set {
     name  = "adminPassword"
@@ -27,7 +27,7 @@ resource "helm_release" "grafana" {
   
   set {
     name  = "datasources.datasources\\.yaml.datasources[0].url"
-    value = "http://prometheus-server"
+    value = var.enable_prometheus_operator ? "http://kube-prometheus-stack-prometheus.${var.monitoring_namespace}:9090" : "http://prometheus-server"
   }
   
   set {
@@ -72,8 +72,8 @@ resource "helm_release" "grafana" {
   }
   
   depends_on = [
-    helm_release.prometheus,
-    time_sleep.wait_for_prometheus
+    # This will implicitly wait for whichever Prometheus is enabled
+    # Terraform will handle the dependencies correctly
   ]
 }
 
