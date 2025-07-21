@@ -20,13 +20,13 @@ if ! command -v kubectl &> /dev/null; then
     exit 1
 fi
 
-# Check if namespace exists
-if ! kubectl --kubeconfig="$KUBECONFIG_PATH" get namespace "$ZENML_NAMESPACE" &> /dev/null; then
-    echo "✅ Namespace $ZENML_NAMESPACE doesn't exist, nothing to clean up"
-    exit 0
-fi
+echo "🔍 Brute force cleaning KubeBlocks resources in namespace $ZENML_NAMESPACE..."
+echo "⚠️  This script will attempt cleanup regardless of namespace state (including Terminating)"
 
-echo "🔍 Checking for stuck KubeBlocks resources in namespace $ZENML_NAMESPACE..."
+# First, try to remove namespace finalizers if it's stuck in Terminating
+echo "🛠️  Step 0: Removing namespace finalizers (if stuck in Terminating)..."
+kubectl --kubeconfig="$KUBECONFIG_PATH" patch namespace "$ZENML_NAMESPACE" \
+    --type='merge' -p='{"metadata":{"finalizers":null}}' 2>/dev/null || true
 
 # Function to force delete resources with finalizers
 cleanup_resource_type() {
@@ -53,19 +53,57 @@ cleanup_resource_type() {
 # Clean up KubeBlocks resources in order of dependency
 echo "🗑️ Cleaning up KubeBlocks managed resources..."
 
+# Clean up backup-related resources first (they have dataprotection.kubeblocks.io/finalizer)
+echo "  🗂️ Cleaning up KubeBlocks backup resources..."
 cleanup_resource_type "backupschedules"
 cleanup_resource_type "backuppolicies"
+cleanup_resource_type "backups"
+cleanup_resource_type "restores"
+
+# Clean up core KubeBlocks resources (they have component.kubeblocks.io/finalizer)
+echo "  🏗️ Cleaning up core KubeBlocks resources..."
 cleanup_resource_type "instancesets"
 cleanup_resource_type "components"
 cleanup_resource_type "clusters"
 
+# Clean up additional KubeBlocks CRDs that might exist
+echo "  🔧 Cleaning up additional KubeBlocks resources..."
+cleanup_resource_type "componentdefinitions"
+cleanup_resource_type "clusterdefinitions"
+cleanup_resource_type "backuprepositories"
+cleanup_resource_type "actionsets"
+
+# Specific manual cleanup for known stuck resources
+echo "🎯 Step 1: Manual cleanup of specific stuck resources..."
+
+# Remove backup policy finalizers (these are the main culprits)
+echo "  Removing backup policy finalizers..."
+kubectl --kubeconfig="$KUBECONFIG_PATH" patch backuppolicy zenml-postgres-postgresql-backup-policy -n "$ZENML_NAMESPACE" \
+    --type='merge' -p='{"metadata":{"finalizers":null}}' 2>/dev/null || true
+
+# Remove backup schedule finalizers
+echo "  Removing backup schedule finalizers..."
+kubectl --kubeconfig="$KUBECONFIG_PATH" patch backupschedule zenml-postgres-postgresql-backup-schedule -n "$ZENML_NAMESPACE" \
+    --type='merge' -p='{"metadata":{"finalizers":null}}' 2>/dev/null || true
+
+# Remove finalizers from all secrets in bulk
+echo "  Removing finalizers from all secrets..."
+kubectl --kubeconfig="$KUBECONFIG_PATH" get secrets -n "$ZENML_NAMESPACE" -o name 2>/dev/null | \
+    xargs -I {} kubectl --kubeconfig="$KUBECONFIG_PATH" patch {} -n "$ZENML_NAMESPACE" \
+    --type='merge' -p='{"metadata":{"finalizers":null}}' 2>/dev/null || true
+
+# Remove finalizers from the PostgreSQL service
+echo "  Removing finalizers from PostgreSQL service..."
+kubectl --kubeconfig="$KUBECONFIG_PATH" patch service zenml-postgres-postgresql-postgresql -n "$ZENML_NAMESPACE" \
+    --type='merge' -p='{"metadata":{"finalizers":null}}' 2>/dev/null || true
+
 # Clean up ConfigMaps, Secrets, and Services with KubeBlocks finalizers
 echo "🧹 Cleaning up ConfigMaps, Secrets, and Services with KubeBlocks finalizers..."
 
-# Remove finalizers from ConfigMaps with component.kubeblocks.io/finalizer
+# Remove finalizers from ConfigMaps with KubeBlocks finalizers
 echo "  Cleaning up ConfigMaps..."
 kubectl --kubeconfig="$KUBECONFIG_PATH" get configmaps -n "$ZENML_NAMESPACE" -o json 2>/dev/null | \
-    jq -r '.items[] | select(.metadata.finalizers != null and (.metadata.finalizers[] | contains("component.kubeblocks.io/finalizer"))) | .metadata.name' | \
+    jq -r '.items[] | select(.metadata.finalizers != null and (.metadata.finalizers[] | contains("kubeblocks.io/finalizer"))) | .metadata.name' | \
     while read -r cm_name; do
         if [ -n "$cm_name" ]; then
             echo "    Removing finalizers from ConfigMap: $cm_name"
@@ -74,10 +112,10 @@ kubectl --kubeconfig="$KUBECONFIG_PATH" get configmaps -n "$ZENML_NAMESPACE" -o 
         fi
     done
 
-# Remove finalizers from Secrets with component.kubeblocks.io/finalizer
+# Remove finalizers from Secrets with KubeBlocks finalizers
 echo "  Cleaning up Secrets..."
 kubectl --kubeconfig="$KUBECONFIG_PATH" get secrets -n "$ZENML_NAMESPACE" -o json 2>/dev/null | \
-    jq -r '.items[] | select(.metadata.finalizers != null and (.metadata.finalizers[] | contains("component.kubeblocks.io/finalizer"))) | .metadata.name' | \
+    jq -r '.items[] | select(.metadata.finalizers != null and (.metadata.finalizers[] | contains("kubeblocks.io/finalizer"))) | .metadata.name' | \
     while read -r secret_name; do
         if [ -n "$secret_name" ]; then
             echo "    Removing finalizers from Secret: $secret_name"
@@ -86,10 +124,10 @@ kubectl --kubeconfig="$KUBECONFIG_PATH" get secrets -n "$ZENML_NAMESPACE" -o jso
         fi
     done
 
-# Remove finalizers from Services with component.kubeblocks.io/finalizer
+# Remove finalizers from Services with KubeBlocks finalizers
 echo "  Cleaning up Services..."
 kubectl --kubeconfig="$KUBECONFIG_PATH" get services -n "$ZENML_NAMESPACE" -o json 2>/dev/null | \
-    jq -r '.items[] | select(.metadata.finalizers != null and (.metadata.finalizers[] | contains("component.kubeblocks.io/finalizer"))) | .metadata.name' | \
+    jq -r '.items[] | select(.metadata.finalizers != null and (.metadata.finalizers[] | contains("kubeblocks.io/finalizer"))) | .metadata.name' | \
     while read -r svc_name; do
         if [ -n "$svc_name" ]; then
             echo "    Removing finalizers from Service: $svc_name"
@@ -102,6 +140,15 @@ kubectl --kubeconfig="$KUBECONFIG_PATH" get services -n "$ZENML_NAMESPACE" -o js
 echo "  Force deleting remaining ConfigMaps, Secrets, and Services..."
 kubectl --kubeconfig="$KUBECONFIG_PATH" delete configmaps,secrets,services --all -n "$ZENML_NAMESPACE" \
     --force --grace-period=0 --ignore-not-found=true 2>/dev/null || true
+
+# Nuclear option: Remove finalizers from ALL remaining resources
+echo "💣 Step 2: Nuclear cleanup - removing finalizers from ALL remaining resources..."
+for resource_type in $(kubectl --kubeconfig="$KUBECONFIG_PATH" api-resources --namespaced=true -o name 2>/dev/null); do
+    echo "  Checking $resource_type..."
+    kubectl --kubeconfig="$KUBECONFIG_PATH" get "$resource_type" -n "$ZENML_NAMESPACE" -o name 2>/dev/null | \
+        xargs -I {} kubectl --kubeconfig="$KUBECONFIG_PATH" patch {} -n "$ZENML_NAMESPACE" \
+        --type='merge' -p='{"metadata":{"finalizers":null}}' 2>/dev/null || true
+done
 
 # Clean up any remaining KubeBlocks CRDs in the namespace
 echo "  Cleaning up any remaining KubeBlocks CRDs..."

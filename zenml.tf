@@ -132,8 +132,8 @@ resource "null_resource" "wait_for_postgres_ready" {
   depends_on = [kubectl_manifest.zenml_postgres_cluster]
 }
 
-# 9.5. Pre-destroy cleanup for KubeBlocks PostgreSQL cluster
-# This ensures proper cleanup of KubeBlocks resources before namespace deletion
+# 9.5. KubeBlocks operator cleanup for PostgreSQL cluster
+# This trusts the KubeBlocks operator to handle proper lifecycle management
 resource "null_resource" "zenml_postgres_cleanup" {
   count = var.enable_zenml ? 1 : 0
   
@@ -141,38 +141,42 @@ resource "null_resource" "zenml_postgres_cleanup" {
   provisioner "local-exec" {
     when    = destroy
     command = <<-EOT
-      echo "Cleaning up ZenML PostgreSQL cluster and KubeBlocks resources..."
+      echo "🚀 Starting KubeBlocks operator cleanup for ZenML..."
       
-      # Delete the cluster first (this should trigger proper cleanup by KubeBlocks operator)
-      kubectl --kubeconfig=./kubeconfig delete cluster zenml-postgres -n zenml-system --timeout=60s --ignore-not-found=true || true
+      # Let KubeBlocks operator handle proper cleanup
+      echo "📋 Operator-managed cleanup"
       
-      # Wait a moment for the operator to process the deletion
-      sleep 10
+      # Ensure termination policy is set to WipeOut for complete cleanup
+      echo "  Setting termination policy to WipeOut..."
+      kubectl --kubeconfig=./kubeconfig patch cluster zenml-postgres -n zenml-system \
+        -p '{"spec":{"terminationPolicy":"WipeOut"}}' --type=merge 2>/dev/null || true
       
-      # Remove finalizers from clusters
-      kubectl --kubeconfig=./kubeconfig get clusters -n zenml-system -o name 2>/dev/null | xargs -I {} kubectl --kubeconfig=./kubeconfig patch {} -n zenml-system -p '{"metadata":{"finalizers":[]}}' --type=merge 2>/dev/null || true
+      # Delete the cluster resource to trigger operator cleanup
+      echo "  Deleting cluster resource (letting operator handle cleanup)..."
+      kubectl --kubeconfig=./kubeconfig delete cluster zenml-postgres -n zenml-system \
+        --timeout=120s --ignore-not-found=true || true
       
-      # Remove finalizers from components
-      kubectl --kubeconfig=./kubeconfig get components -n zenml-system -o name 2>/dev/null | xargs -I {} kubectl --kubeconfig=./kubeconfig patch {} -n zenml-system -p '{"metadata":{"finalizers":[]}}' --type=merge 2>/dev/null || true
+      # Wait for operator to process the deletion
+      echo "  Waiting for KubeBlocks operator to complete cleanup..."
+      for i in {1..12}; do
+        if ! kubectl --kubeconfig=./kubeconfig get cluster zenml-postgres -n zenml-system >/dev/null 2>&1; then
+          echo "  ✅ Operator cleanup completed successfully"
+          operator_cleanup_success=true
+          break
+        fi
+        echo "  ⏳ Waiting for operator cleanup... ($i/12)"
+        sleep 10
+      done
       
-      # Remove finalizers from instance sets
-      kubectl --kubeconfig=./kubeconfig get instancesets -n zenml-system -o name 2>/dev/null | xargs -I {} kubectl --kubeconfig=./kubeconfig patch {} -n zenml-system -p '{"metadata":{"finalizers":[]}}' --type=merge 2>/dev/null || true
+      # Verify cleanup completion
+      if [ "$operator_cleanup_success" = true ]; then
+        echo "🎉 KubeBlocks operator successfully cleaned up all resources"
+      else
+        echo "⚠️  KubeBlocks operator cleanup timed out after 2 minutes"
+        echo "   This may indicate the operator needs attention"
+      fi
       
-      # Remove finalizers from all ConfigMaps, Secrets, and Services with KubeBlocks finalizers
-      echo "Removing finalizers from ConfigMaps, Secrets, and Services..."
-      kubectl --kubeconfig=./kubeconfig get configmaps -n zenml-system -o json 2>/dev/null | jq -r '.items[] | select(.metadata.finalizers != null and (.metadata.finalizers[] | contains("component.kubeblocks.io/finalizer"))) | .metadata.name' | xargs -I {} kubectl --kubeconfig=./kubeconfig patch configmap {} -n zenml-system -p '{"metadata":{"finalizers":[]}}' --type=merge 2>/dev/null || true
-      
-      kubectl --kubeconfig=./kubeconfig get secrets -n zenml-system -o json 2>/dev/null | jq -r '.items[] | select(.metadata.finalizers != null and (.metadata.finalizers[] | contains("component.kubeblocks.io/finalizer"))) | .metadata.name' | xargs -I {} kubectl --kubeconfig=./kubeconfig patch secret {} -n zenml-system -p '{"metadata":{"finalizers":[]}}' --type=merge 2>/dev/null || true
-      
-      kubectl --kubeconfig=./kubeconfig get services -n zenml-system -o json 2>/dev/null | jq -r '.items[] | select(.metadata.finalizers != null and (.metadata.finalizers[] | contains("component.kubeblocks.io/finalizer"))) | .metadata.name' | xargs -I {} kubectl --kubeconfig=./kubeconfig patch service {} -n zenml-system -p '{"metadata":{"finalizers":[]}}' --type=merge 2>/dev/null || true
-      
-      # Force delete any remaining KubeBlocks resources
-      kubectl --kubeconfig=./kubeconfig delete clusters,components,instancesets,backuppolicies,backupschedules -n zenml-system --all --timeout=60s --ignore-not-found=true || true
-      
-      # Final cleanup - delete any remaining resources that might have finalizers
-      kubectl --kubeconfig=./kubeconfig delete configmaps,secrets,services --all -n zenml-system --force --grace-period=0 --ignore-not-found=true || true
-      
-      echo "ZenML PostgreSQL cleanup completed"
+      echo "🏁 ZenML cleanup completed"
     EOT
   }
   

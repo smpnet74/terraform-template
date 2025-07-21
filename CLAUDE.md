@@ -239,3 +239,4 @@ The cluster provides a solid foundation without opinionated application deployme
 ## Memories
 
 - Learned how to memorize text in a markdown file
+- Fixed ZenML cleanup architecture: Changed from brute-force finalizer removal to operator-managed cleanup that trusts KubeBlocks to handle proper lifecycle management. This prevents Terraform/operator conflicts and resolves stuck finalizer issues. Testing confirmed the operator handles cleanup perfectly, so complex fallback logic was removed for simplicity.
