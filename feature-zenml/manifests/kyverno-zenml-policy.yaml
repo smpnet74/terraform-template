@@ -1,0 +1,51 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-resource-requests-zenml-updated
+  annotations:
+    policies.kyverno.io/title: Require Resource Requests (Updated for ZenML)
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Pod
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+  - name: check-container-resources
+    match:
+      any:
+      - resources:
+          kinds:
+          - Pod
+    exclude:
+      any:
+      - resources:
+          namespaces: 
+          - kube-system
+          - kyverno
+          - kgateway-system
+          - local-path-storage
+          - istio-system
+          - monitoring
+          - policy-reporter
+          - ${zenml_namespace}  # Add ZenML namespace exclusion
+      - resources:
+          selector:
+            matchLabels:
+              workload-type: debug
+      - resources:
+          selector:
+            matchLabels:
+              workload-type: temporary
+    validate:
+      message: "Production containers should specify CPU and memory requests."
+      anyPattern:
+      - spec:
+          containers:
+          - resources:
+              requests:
+                cpu: "?*"
+                memory: "?*"
+      - metadata:
+          annotations:
+            policy.kyverno.io/exempt-resource-requests: "true"

@@ -1,0 +1,13 @@
+apiVersion: argoproj.io/v1alpha1
+kind: EventBus
+metadata:
+  name: default
+  namespace: ${argo_namespace}
+spec:
+  jetstream:
+    version: "${jetstream_version}"
+    replicas: 3
+    persistence:
+      storageClassName: "civo-volume"
+      accessMode: ReadWriteOnce
+      volumeSize: 10Gi
