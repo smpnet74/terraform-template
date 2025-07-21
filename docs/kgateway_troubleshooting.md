@@ -270,13 +270,62 @@ kubectl describe certificate default-gateway-cert -n default
 
 # Verify the Gateway is referencing the correct certificate
 kubectl get gateway default-gateway -n default -o yaml | grep -A 10 certificateRefs
+
+# Verify the namespace discovery solution is configured
+kubectl get gateway default-gateway -n default -o yaml | grep -A 10 namespaceDiscovery
 ```
 
 **Solution:**
+
+**Primary Fix - Configure Namespace Discovery (MOST IMPORTANT):**
+
+Kgateway needs to be configured to discover resources in the `default` namespace where the Gateway and certificate are located. Add the following to your Kgateway Helm values in `kgateway_api.tf`:
+
+```hcl
+values = [
+  yamlencode({
+    discoveryNamespaceSelectors = [
+      # Include default namespace where Gateway and certificates are located
+      {
+        matchLabels = {
+          "kubernetes.io/metadata.name" = "default"
+        }
+      },
+      # Include kgateway-system namespace
+      {
+        matchLabels = {
+          "kubernetes.io/metadata.name" = "kgateway-system"
+        }
+      }
+    ]
+  })
+]
+```
+
+**Secondary Fix - Duplicate Certificate Secret:**
+
+Create a duplicate certificate secret in the `kgateway-system` namespace as a backup:
+
+```hcl
+resource "kubernetes_secret" "cloudflare_origin_cert_kgateway" {
+  metadata {
+    name      = "default-gateway-cert"
+    namespace = "kgateway-system"
+  }
+  type = "kubernetes.io/tls"
+  data = {
+    "tls.crt" = file("${path.module}/certs/tls.crt")
+    "tls.key" = file("${path.module}/certs/tls.key")
+  }
+}
+```
+
+**Additional Checks:**
 * Ensure the Cloudflare Origin Certificate is properly loaded as a Kubernetes secret
 * Verify the certificate secret name matches what's referenced in the Gateway (`default-gateway-cert`)
-* Check that the certificate secret is in the same namespace as the Gateway (`default`)
+* Check that the certificate secret exists in both `default` and `kgateway-system` namespaces
 * Verify the secret contains both `tls.crt` and `tls.key` data
+* Run the diagnostic script: `./scripts/diagnose-ssl-handshake.sh`
 
 ### 3.2. Routing Issues
 
@@ -518,3 +567,37 @@ This script will:
 8. Verify certificate integration
 
 The output is color-coded for better readability.
+
+---
+
+## SSL Handshake Diagnostic Script
+
+For SSL certificate issues specifically, use the dedicated diagnostic script:
+
+```bash
+# Run the SSL handshake diagnostic script
+./scripts/diagnose-ssl-handshake.sh
+
+# Or with custom parameters
+./scripts/diagnose-ssl-handshake.sh ./kubeconfig timbersedgearb.com
+```
+
+**What the script checks:**
+1. **Certificate Secrets**: Verifies certificates exist in both `default` and `kgateway-system` namespaces
+2. **Gateway Status**: Checks Gateway conditions and programming status
+3. **Kgateway Pods**: Examines pod health and logs for TLS-related errors
+4. **HTTPRoutes**: Verifies route attachment and configuration
+5. **Load Balancer**: Tests direct SSL connections to Gateway IP
+6. **DNS Resolution**: Checks domain and wildcard DNS resolution
+7. **HTTPS Endpoints**: Tests all configured service endpoints
+8. **Kgateway Configuration**: Reviews Helm values and namespace discovery
+9. **Namespace Labels**: Verifies namespace discovery configuration
+
+**Common fixes the script suggests:**
+- Restart Kgateway deployment if certificate loading fails
+- Recreate Gateway resource if status shows issues
+- Check namespace discovery configuration
+- Verify certificate secret format and content
+- Test direct SSL connections to isolate issues
+
+This script provides comprehensive SSL troubleshooting and is the recommended first step for certificate presentation issues.

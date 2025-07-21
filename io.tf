@@ -166,5 +166,47 @@ variable "monitoring_namespace" {
   default     = "monitoring"
 }
 
+# ZenML MLOps Platform
+variable "enable_zenml" {
+  description = "Whether to deploy the ZenML MLOps platform"
+  type        = bool
+  default     = false
+}
 
-# Output
+variable "zenml_chart_version" {
+  description = "Helm chart version for ZenML Server"
+  type        = string
+  default     = "0.84.0" # Latest version as of July 2025
+}
+
+variable "zenml_server_version" {
+  description = "Version of the ZenML server Docker image"
+  type        = string
+  default     = "0.84.0"
+}
+
+variable "zenml_postgres_version" {
+  description = "Version of the KubeBlocks PostgreSQL instance"
+  type        = string
+  default     = "apecloud-postgresql-15.3.0"
+}
+
+variable "zenml_namespace" {
+  description = "Namespace for ZenML components"
+  type        = string
+  default     = "zenml-system"
+}
+
+variable "zenml_artifact_bucket" {
+  description = "Name of the Civo Object Store bucket for ZenML artifacts"
+  type        = string
+  default     = "zenml-artifacts"
+}
+
+variable "zenml_artifact_bucket_size" {
+  description = "Size of the Civo Object Store bucket for ZenML artifacts in GB (must be multiple of 500)"
+  type        = number
+  default     = 500
+}
+
+

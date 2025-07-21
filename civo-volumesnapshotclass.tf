@@ -39,7 +39,22 @@ resource "null_resource" "configure_kubeblocks_snapshot" {
       KUBECONFIG = "${path.module}/kubeconfig"
     }
     command = <<-EOT
-      kubectl patch kubeblocks kubeblocks -n kb-system --type=merge -p '{"spec":{"dataProtection":{"volumeSnapshotClass":"civo-snapshot-class"}}}' || true
+      # First, identify the correct KubeBlocks resource
+      echo "Checking for KubeBlocks resources..."
+      kubectl get crds | grep kubeblocks || echo "No KubeBlocks CRDs found"
+      
+      # Try different possible resource types for KubeBlocks configuration
+      if kubectl get KubeBlocks -n kb-system >/dev/null 2>&1; then
+        echo "Found KubeBlocks resource, patching..."
+        kubectl patch KubeBlocks kubeblocks -n kb-system --type=merge -p '{"spec":{"dataProtection":{"volumeSnapshotClass":"civo-snapshot-class"}}}'
+      elif kubectl get kubeblocks.kubeblocks.io -n kb-system >/dev/null 2>&1; then
+        echo "Found kubeblocks.kubeblocks.io resource, patching..."
+        kubectl patch kubeblocks.kubeblocks.io kubeblocks -n kb-system --type=merge -p '{"spec":{"dataProtection":{"volumeSnapshotClass":"civo-snapshot-class"}}}'
+      else
+        echo "KubeBlocks resource not found or not ready yet, skipping configuration"
+        echo "Available resources in kb-system:"
+        kubectl get all -n kb-system || echo "kb-system namespace not found"
+      fi
     EOT
   }
   

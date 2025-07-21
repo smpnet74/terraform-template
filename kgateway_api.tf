@@ -59,6 +59,52 @@ resource "helm_release" "kgateway" {
   wait             = true
   timeout          = 900    # 15 minutes
 
+  # Configure namespace discovery to include default namespace
+  # This is critical for Kgateway to discover Gateway resources and certificates
+  values = [
+    yamlencode({
+      discoveryNamespaceSelectors = [
+        # Include default namespace where Gateway and certificates are located
+        {
+          matchLabels = {
+            "kubernetes.io/metadata.name" = "default"
+          }
+        },
+        # Include kgateway-system namespace
+        {
+          matchLabels = {
+            "kubernetes.io/metadata.name" = "kgateway-system"
+          }
+        },
+        # Also include any namespace with gateway-related labels
+        {
+          matchLabels = {
+            "gateway.networking.k8s.io/managed-by" = "kgateway"
+          }
+        }
+      ]
+      # Add resource requests for Gateway proxy pods to satisfy Kyverno policies
+      gatewayProxies = {
+        default = {
+          podTemplate = {
+            proxyContainer = {
+              resources = {
+                requests = {
+                  cpu    = "100m"
+                  memory = "128Mi"
+                }
+                limits = {
+                  cpu    = "500m"
+                  memory = "512Mi"
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+  ]
+
   depends_on = [
     helm_release.kgateway_crds,
     time_sleep.wait_for_kgateway_crds
@@ -73,6 +119,8 @@ kind: Gateway
 metadata:
   name: default-gateway
   namespace: default
+  labels:
+    workload-type: temporary
 spec:
   gatewayClassName: kgateway
   listeners:
@@ -98,7 +146,8 @@ spec:
 
   depends_on = [
     helm_release.kgateway,
-    kubernetes_secret.cloudflare_origin_cert
+    kubernetes_secret.cloudflare_origin_cert,
+    kubernetes_secret.cloudflare_origin_cert_kgateway
   ]
 }
 

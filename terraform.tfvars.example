@@ -1,20 +1,39 @@
-   civo_token = "your-civo-api-token"
-   github_token = "your-github-personal-access-token"
-   domain_name = "your-domain.com"
-   cloudflare_api_token = "your-cloudflare-api-token"
-   cloudflare_zone_id = "your-cloudflare-zone-id"
-   cloudflare_email = "your-cloudflare-email"
-   cluster_node_size = "g4s.kube.small"
-   region = "NYC1"
-   enable_argo_workflows = true
-   argo_workflows_chart_version = "0.45.19"  # Argo Workflows 3.6.10
-   argo_events_chart_version = "2.4.15"      # Latest compatible with Argo Workflows 3.6.10
-   jetstream_version = "2.10.10"             # Uses config reloader 0.14.0 (working version)
-   metrics_server_chart_version = "3.12.1"  # Latest stable version
+civo_token                   = "your-civo-api-token"
+github_token                 = "your-github-personal-access-token"
+domain_name                  = "your-domain.com"
+cloudflare_api_token         = "your-cloudflare-api-token"
+cloudflare_zone_id           = "your-cloudflare-zone-id"
+cloudflare_email             = "your-cloudflare-email"
+cluster_node_size            = "g4s.kube.small"
+region                       = "NYC1"
+metrics_server_chart_version = "3.12.1"  # Latest stable version
 
-   # Kyverno Policy Engine Configuration
-   enable_kyverno = true                     # Deploy Kyverno policy engine
-   enable_kyverno_policies = true            # Deploy pre-built security policies
-   kyverno_chart_version = "3.4.4"          # Kyverno v1.14.4
-   kyverno_policies_chart_version = "3.4.4" # Compatible with Kyverno v1.14.4
-   kyverno_policy_exclusions = ["kube-system", "kyverno", "kgateway-system", "local-path-storage"]
+# Argo workflows and Events
+enable_argo_workflows        = true
+argo_workflows_chart_version = "0.45.19" # Argo Workflows 3.6.10
+argo_events_chart_version    = "2.4.15"  # Compatible with Argo Workflows 3.6.10
+jetstream_version            = "2.10.10" # Uses config reloader 0.14.0 (working version)
+
+# Kyverno Policy Engine Configuration
+enable_kyverno                     = true      # Deploy Kyverno policy engine
+enable_kyverno_policies            = true      # Deploy pre-built security policies
+kyverno_chart_version              = "3.4.4"   # Kyverno v1.14.4
+kyverno_policies_chart_version     = "3.4.4"   # Compatible with Kyverno v1.14.4
+kyverno_policy_exclusions = ["kube-system", "kyverno", "kgateway-system", "local-path-storage", "zenml-system"]
+
+# Policy Reporter UI Configuration
+enable_policy_reporter_ui          = true      # Deploy Policy Reporter web UI
+policy_reporter_chart_version      = "2.22.0"  # Latest stable version
+
+# Prometheus Operator Monitoring Stack Configuration
+enable_prometheus_operator         = true      # Deploy Prometheus Operator for cloud-native monitoring
+prometheus_operator_chart_version  = "61.9.0"  # Latest kube-prometheus-stack version
+monitoring_namespace               = "monitoring"  # Dedicated namespace for monitoring components
+
+# ZenML MLOps Platform Configuration
+enable_zenml                       = false     # Deploy ZenML MLOps platform
+zenml_chart_version                = "0.84.0"  # Latest ZenML Helm chart version
+zenml_server_version               = "0.84.0"  # ZenML server Docker image version
+zenml_namespace                    = "zenml-system"  # Namespace for ZenML components
+zenml_artifact_bucket              = "zenml-artifacts"  # Civo Object Store bucket name
+zenml_artifact_bucket_size         = 500       # Object Store size in GB (must be multiple of 500)

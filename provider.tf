@@ -47,6 +47,12 @@ terraform {
       version = "~> 0.10.0"
     }
 
+    # Used to generate random passwords
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6.0"
+    }
+
   }
 }
 

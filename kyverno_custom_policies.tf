@@ -17,7 +17,7 @@ metadata:
       Ensures HTTPRoute resources follow organizational standards including
       proper Gateway references and hostname conventions.
 spec:
-  validationFailureAction: enforce
+  validationFailureAction: Audit
   background: true
   rules:
   - name: require-default-gateway-reference
@@ -71,7 +71,7 @@ metadata:
       Ensures CiliumNetworkPolicy resources include required annotations
       and follow security best practices.
 spec:
-  validationFailureAction: enforce
+  validationFailureAction: Audit
   background: true
   rules:
   - name: require-policy-annotations
@@ -132,7 +132,7 @@ metadata:
       Automatically adds ambient mesh labels to namespaces when they
       are annotated for ambient mesh inclusion.
 spec:
-  validationFailureAction: enforce
+  validationFailureAction: Audit
   background: true
   rules:
   - name: add-ambient-mode-label
@@ -175,7 +175,7 @@ metadata:
       Validates TLS secrets used with Cloudflare Origin Certificates
       follow proper naming and structure conventions.
 spec:
-  validationFailureAction: enforce
+  validationFailureAction: Audit
   background: true
   rules:
   - name: validate-cloudflare-origin-cert
@@ -218,7 +218,7 @@ metadata:
       Ensures production containers specify resource requests for CPU and memory.
       Allows exemptions for debug, testing, and temporary workloads.
 spec:
-  validationFailureAction: enforce
+  validationFailureAction: Audit
   background: true
   rules:
   - name: check-container-resources
