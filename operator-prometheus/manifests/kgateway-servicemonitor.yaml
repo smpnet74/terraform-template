@@ -1,0 +1,19 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: kgateway
+  namespace: ${monitoring_namespace}
+  labels:
+    app.kubernetes.io/name: kgateway
+    app.kubernetes.io/part-of: gateway-api
+spec:
+  selector:
+    matchLabels:
+      app: kgateway
+  namespaceSelector:
+    matchNames:
+    - kgateway-system
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics

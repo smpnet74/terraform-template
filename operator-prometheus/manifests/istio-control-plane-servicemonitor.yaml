@@ -1,0 +1,19 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: istio-control-plane
+  namespace: ${monitoring_namespace}
+  labels:
+    app.kubernetes.io/name: istio
+    app.kubernetes.io/part-of: istio
+spec:
+  selector:
+    matchLabels:
+      app: istiod-gloo
+  namespaceSelector:
+    matchNames:
+    - istio-system
+  endpoints:
+  - port: http-monitoring
+    interval: 30s
+    path: /stats/prometheus

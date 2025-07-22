@@ -21,7 +21,7 @@ module "kyverno" {
   depends_on = [
     time_sleep.wait_for_cluster,
     null_resource.cilium_upgrade,  # Ensure Cilium is ready before policies
-    time_sleep.wait_for_prometheus_operator,  # Wait for Prometheus Operator to be fully ready
+    module.prometheus_operator,  # Wait for Prometheus Operator to be fully ready
     kubectl_manifest.default_gateway,
     kubernetes_secret.cloudflare_origin_cert
   ]
