@@ -38,3 +38,6 @@ certs/
 *.crt
 *.key
 *.pem
+
+# Claude Code project instructions
+CLAUDE.md
