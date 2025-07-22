@@ -37,40 +37,6 @@ output "grafana_credentials" {
 
 
 
-# Kyverno Policy Reporter UI
-output "policy_reporter_url" {
-  description = "URL to access the Policy Reporter web UI for Kyverno policy management"
-  value       = var.enable_kyverno && var.enable_policy_reporter_ui ? "https://policy-reporter.${var.domain_name}" : "Policy Reporter UI is disabled"
-}
-
-output "kyverno_status_commands" {
-  description = "Commands to check Kyverno status and policies"
-  value = var.enable_kyverno ? join("\n", [
-    "Check Kyverno pods:        kubectl get pods -n kyverno",
-    "View cluster policies:     kubectl get clusterpolicies", 
-    "View policy reports:       kubectl get clusterpolicyreports",
-    "View background reports:   kubectl get backgroundscanreports"
-  ]) : "Kyverno is disabled"
-}
-
-output "kyverno_policy_info" {
-  description = "Information about deployed Kyverno policies and management interfaces"
-  value = var.enable_kyverno ? join("\n", [
-    "Kyverno Policy Engine v1.14.4 with Policy Reporter UI v${var.policy_reporter_chart_version}:",
-    "",
-    "🌐 Web Interface: ${var.enable_policy_reporter_ui ? "https://policy-reporter.${var.domain_name}" : "Disabled"}",
-    "📊 Dashboard Features: Policy compliance, violation reports, cluster overview",
-    "",
-    "📋 Deployed Policies:",
-    "• Pre-built policies: ${var.enable_kyverno_policies ? "Enabled (Pod Security Standards baseline)" : "Disabled"}",
-    "• Custom policies: Gateway API governance, Cilium Network Policy governance", 
-    "• Ambient Mesh preparation: Automatic namespace labeling for Istio",
-    "• Certificate validation: Cloudflare Origin Certificate standards",
-    "• Resource requirements: CPU and memory requests enforcement",
-    "",
-    "🚫 Excluded namespaces: ${join(", ", var.kyverno_policy_exclusions)}"
-  ]) : "Kyverno is disabled"
-}
 
 # KubeBlocks information
 output "kubeblocks_info" {

@@ -1,0 +1,55 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-resource-requests
+  annotations:
+    policies.kyverno.io/title: Require Resource Requests
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Ensures production containers specify resource requests for CPU and memory.
+      Allows exemptions for debug, testing, and temporary workloads.
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+  - name: check-container-resources
+    match:
+      any:
+      - resources:
+          kinds:
+          - Pod
+    exclude:
+      any:
+      # Exclude system namespaces
+      - resources:
+          namespaces: ${jsonencode(kyverno_policy_exclusions)}
+      # Exclude debug and temporary workloads
+      - resources:
+          selector:
+            matchLabels:
+              workload-type: debug
+      - resources:
+          selector:
+            matchLabels:
+              workload-type: temporary
+      # Exclude jobs and cronjobs (often one-time tasks)
+      - resources:
+          selector:
+            matchLabels:
+              app.kubernetes.io/component: job
+    validate:
+      message: "Production containers should specify CPU and memory requests. Add label 'workload-type: debug' or 'workload-type: temporary' to exempt non-production workloads."
+      anyPattern:
+      # Allow pods with resource requests
+      - spec:
+          containers:
+          - resources:
+              requests:
+                cpu: "?*"
+                memory: "?*"
+      # Allow pods with debug/temporary annotation (backup exemption)
+      - metadata:
+          annotations:
+            policy.kyverno.io/exempt-resource-requests: "true"

@@ -1,0 +1,32 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: istio-ambient-mesh-preparation
+  annotations:
+    policies.kyverno.io/title: Istio Ambient Mesh Preparation
+    policies.kyverno.io/category: Istio
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Namespace
+    policies.kyverno.io/description: >-
+      Automatically adds ambient mesh labels to namespaces when they
+      are annotated for ambient mesh inclusion.
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+  - name: add-ambient-mode-label
+    match:
+      any:
+      - resources:
+          kinds:
+          - Namespace
+    mutate:
+      patchStrategicMerge:
+        metadata:
+          labels:
+            +(istio.io/dataplane-mode): ambient
+    preconditions:
+      any:
+      - key: "{{ request.object.metadata.annotations.\"mesh.istio.io/ambient\" || '' }}"
+        operator: Equals
+        value: "enabled"
