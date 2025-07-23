@@ -39,5 +39,6 @@ certs/
 *.key
 *.pem
 
-# Claude Code project instructions
+# AI memories
 CLAUDE.md
+GEMINI.md

@@ -23,10 +23,15 @@ This architectural plan outlines three approaches for implementing zero-trust ne
 
 ### Target Application Profile
 - **AI Application Namespace**: `app-travelexample`
+- **MCP Server Namespaces**: `mcp-*` (e.g., `mcp-teamalpha`, `mcp-teambeta`)
 - **Expected Interactions**:
-  - Argo Workflows deploying/managing application resources
-  - KubeBlocks provisioning databases within application namespace
-  - ZenML executing ML pipelines and accessing application services
+  - Argo Workflows executing application-specific operational workflows (not CI/CD deployment)
+  - Argo Events triggering workflows within application namespace for operational tasks
+  - KubeBlocks provisioning application databases within app namespace
+  - ZenML developing datasets and deploying to application databases via KubeBlocks
+  - AI applications accessing LLMs through Kgateway proxy (no direct external LLM API calls)
+  - MCP servers/tools accessed by applications via MCP gateway through Kgateway routing
+  - Applications communicating with MCP services via waypoint proxies (no direct namespace-to-namespace networking)
   - External ingress via Gateway API for user traffic
 
 ---
@@ -93,45 +98,74 @@ graph TB
 
 ```mermaid
 graph LR
-    subgraph "Internet"
+    subgraph "External Services"
         USER[Users/APIs]
+        LLM[LLM APIs<br/>OpenAI/Anthropic]
     end
     
     subgraph "Gateway Layer"
         GW[Kgateway<br/>Traffic Filtering]
+        LLMGW[LLM Gateway<br/>Proxy Route]
+        MCPGW[MCP Gateway<br/>Proxy Route]
     end
     
     subgraph "System Namespaces"
-        ARGO[argo<br/>Workflows]
-        KB[kb-system<br/>Databases]
-        ZENML[zenml-system<br/>MLOps]
+        ARGO[argo<br/>Operational Workflows]
+        ARGOEV[argo-events<br/>App Namespace]
+        KB[kb-system<br/>Database Operator]
+        ZENML[zenml-system<br/>MLOps & Datasets]
         MON[monitoring<br/>Observability]
     end
     
     subgraph "Application Namespace"
         APP[app-travelexample<br/>AI Application]
-        DB[(Application DB)]
-        ML[ML Pipeline]
+        DB[(Application DB<br/>via KubeBlocks)]
+        ML[ZenML Dataset<br/>Pipeline]
+        WF[Argo Workflow<br/>Operations]
+    end
+    
+    subgraph "MCP Namespaces"
+        MCP1[mcp-teamalpha<br/>MCP Server]
+        MCP2[mcp-teambeta<br/>MCP Tools]
+    end
+    
+    subgraph "Service Mesh"
+        WP1[Waypoint Proxy<br/>App Namespace]
+        WP2[Waypoint Proxy<br/>MCP Namespaces]
     end
     
     USER --> GW
+    LLM --> LLMGW
     GW --> APP
-    ARGO -.-> APP
+    LLMGW --> APP
+    MCPGW --> WP1
+    WP1 --> APP
+    WP2 --> MCP1
+    WP2 --> MCP2
+    APP --> WP1
+    WP1 --> MCPGW
+    
+    ARGO -.-> WF
+    ARGOEV -.-> WF
     KB -.-> DB
     ZENML -.-> ML
     MON -.-> APP
-    ML --> APP
-    APP --> DB
+    ML --> DB
+    WF --> APP
     
-    classDef internet fill:#e1f5fe
+    classDef external fill:#e1f5fe
     classDef gateway fill:#fff3e0
     classDef system fill:#f3e5f5
     classDef app fill:#e8f5e8
+    classDef mcp fill:#ffe0e6
+    classDef mesh fill:#f0f8e6
     
-    class USER internet
-    class GW gateway
-    class ARGO,KB,ZENML,MON system
-    class APP,DB,ML app
+    class USER,LLM external
+    class GW,LLMGW,MCPGW gateway
+    class ARGO,ARGOEV,KB,ZENML,MON system
+    class APP,DB,ML,WF app
+    class MCP1,MCP2 mcp
+    class WP1,WP2 mesh
 ```
 
 ---
@@ -180,24 +214,30 @@ metadata:
 spec:
   podSelector: {}
   ingress:
-  # Allow intra-namespace communication
+  # Allow intra-namespace communication (for Argo Events workflows)
   - fromEndpoints:
     - matchLabels:
         k8s:io.kubernetes.pod.namespace: app-travelexample
-  # Allow system services
+  # Allow ZenML dataset development and deployment
   - fromEndpoints:
     - matchLabels:
         k8s:io.kubernetes.pod.namespace: zenml-system
         app: zenml-server
+  # Allow Argo operational workflows (not CI/CD)
   - fromEndpoints:
     - matchLabels:
         k8s:io.kubernetes.pod.namespace: argo
         app.kubernetes.io/component: workflow-controller
-  # Allow database operator
+  # Allow database operator for app database provisioning
   - fromEndpoints:
     - matchLabels:
         k8s:io.kubernetes.pod.namespace: kb-system
         app.kubernetes.io/name: kubeblocks
+  # Allow Gateway API traffic (LLM and MCP proxying)
+  - fromEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: kgateway-system
+        app.kubernetes.io/name: kgateway
   egress:
   # Allow DNS and system communication
   - toEndpoints:
@@ -207,6 +247,46 @@ spec:
     - k8sService:
         serviceName: kube-dns
         namespace: kube-system
+  # Allow LLM access via Gateway proxy only
+  - toEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: kgateway-system
+        app.kubernetes.io/name: kgateway
+  # Deny direct external LLM access
+  - toEntities: ["world"]
+    toPorts:
+    - ports:
+      - port: "443"
+      rules:
+        http:
+        - method: "GET"
+          path: "/health"  # Only health checks allowed
+---
+# MCP namespace policy template
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: mcp-namespace-base-policy
+  namespace: mcp-teamalpha  # Applied to all mcp-* namespaces
+spec:
+  podSelector: {}
+  ingress:
+  # Allow intra-namespace communication
+  - fromEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: mcp-teamalpha
+  # Allow access via Gateway MCP proxy only
+  - fromEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: kgateway-system
+        app.kubernetes.io/name: kgateway
+  egress:
+  # Allow DNS
+  - toServices:
+    - k8sService:
+        serviceName: kube-dns
+        namespace: kube-system
+  # Deny direct cross-namespace communication
 ```
 
 #### **3. Istio Ambient Mesh Layer (L7)**
@@ -239,35 +319,89 @@ spec:
   - kind: Gateway
     name: app-travelexample-waypoint
   rules:
-  # Allow ZenML pipeline access
+  # Allow ZenML dataset development and deployment
   - from:
     - source:
         principals: ["cluster.local/ns/zenml-system/sa/zenml-server"]
     to:
     - operation:
-        methods: ["GET", "POST"]
-        paths: ["/api/v1/models/*", "/api/v1/predictions/*"]
-  # Allow Argo workflow access
+        methods: ["GET", "POST", "PUT"]
+        paths: ["/api/v1/datasets/*", "/api/v1/models/*", "/database/*"]
+  # Allow Argo operational workflows (not CI/CD)
   - from:
     - source:
         principals: ["cluster.local/ns/argo/sa/argo-workflow"]
     to:
     - operation:
         methods: ["GET", "POST", "PUT", "DELETE"]
+        paths: ["/operations/*", "/workflows/*"]
+    when:
+    - key: request.headers[x-workflow-type]
+      values: ["operational"]
+  # Allow MCP gateway access via waypoint proxy
+  - from:
+    - source:
+        principals: ["cluster.local/ns/kgateway-system/sa/kgateway"]
+    to:
+    - operation:
+        methods: ["GET", "POST"]
+        paths: ["/mcp/*"]
+  # Allow LLM gateway access via waypoint proxy
+  - from:
+    - source:
+        principals: ["cluster.local/ns/kgateway-system/sa/kgateway"]
+    to:
+    - operation:
+        methods: ["POST"]
+        paths: ["/llm-proxy/*"]
+---
+# MCP namespace waypoint and authorization
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: mcp-teamalpha-waypoint
+  namespace: mcp-teamalpha
+  labels:
+    istio.io/waypoint-for: service
+spec:
+  gatewayClassName: istio-waypoint
+  listeners:
+  - name: mesh
+    port: 15008
+    protocol: HBONE
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: mcp-gateway-only-access
+  namespace: mcp-teamalpha
+spec:
+  targetRefs:
+  - kind: Gateway
+    name: mcp-teamalpha-waypoint
+  rules:
+  # Only allow access via Gateway MCP proxy
+  - from:
+    - source:
+        principals: ["cluster.local/ns/kgateway-system/sa/kgateway"]
+    to:
+    - operation:
+        methods: ["GET", "POST"]
 ```
 
 #### **4. Gateway API Layer (Ingress)**
 ```yaml
-# HTTPRoute with security filtering
+# HTTPRoute with security filtering and LLM/MCP proxying
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
-metadata:
+metadata:  
   name: app-travelexample-route
 spec:
   parentRefs:
   - name: default-gateway
   hostnames: ["travel.example.com"]
   rules:
+  # Application API routes
   - matches:
     - path:
         type: PathPrefix
@@ -281,18 +415,76 @@ spec:
     backendRefs:
     - name: travel-api
       port: 8080
+  # LLM proxy routes (block direct external access)
+  - matches:
+    - path:
+        type: PathPrefix
+        value: "/llm-proxy/"
+    filters:
+    - type: RequestHeaderModifier
+      requestHeaderModifier:
+        add:
+        - name: X-LLM-Proxy
+          value: "true"
+    backendRefs:
+    - name: llm-proxy-service
+      port: 8080
+  # MCP gateway routes (cross-namespace MCP access)
+  - matches:
+    - path:
+        type: PathPrefix
+        value: "/mcp/"
+    filters:
+    - type: RequestHeaderModifier
+      requestHeaderModifier:
+        add:
+        - name: X-MCP-Gateway
+          value: "true"
+    backendRefs:
+    - name: mcp-gateway-service
+      port: 8080
+---
+# MCP namespace HTTPRoute (accessed via Gateway only)
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: mcp-teamalpha-internal
+  namespace: mcp-teamalpha
+spec:
+  parentRefs:
+  - name: default-gateway
+    namespace: kgateway-system
+  hostnames: ["mcp-teamalpha.internal"]
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: "/mcp-services/"
+    filters:
+    - type: RequestHeaderModifier
+      requestHeaderModifier:
+        add:
+        - name: X-MCP-Namespace
+          value: mcp-teamalpha
+    backendRefs:
+    - name: mcp-server
+      port: 8080
 ```
 
 ### **Benefits:**
-✅ **Operational Simplicity**: Gradual security implementation
-✅ **Developer Friendly**: Clear security boundaries without blocking development
-✅ **Platform Integration**: Seamless ZenML, Argo, KubeBlocks operations
-✅ **Scalability**: Policies scale with namespace growth
-✅ **Auditability**: Clear security posture progression
+✅ **Operational Simplicity**: Gradual security implementation with intelligent defaults
+✅ **Developer Friendly**: Clear security boundaries without blocking development workflows
+✅ **Platform Integration**: Seamless ZenML dataset development, Argo operational workflows, and KubeBlocks database provisioning
+✅ **LLM Security**: Enforced proxy access prevents direct external LLM API calls
+✅ **MCP Isolation**: Teams can deploy MCP servers with guaranteed gateway-only access
+✅ **Scalability**: Policies automatically scale with namespace and team growth
+✅ **Auditability**: Clear security posture progression with comprehensive logging
 
 ### **Trade-offs:**
 ⚠️ **Initial Permissiveness**: May allow some unnecessary communication initially
-⚠️ **Complexity Growth**: Requires ongoing policy refinement
+⚠️ **Complexity Growth**: Requires ongoing policy refinement as teams and MCP services expand
+⚠️ **Gateway Dependency**: LLM and MCP access depends on Gateway API routing reliability
+⚠️ **Waypoint Proxy Overhead**: L7 processing adds latency for MCP service interactions
 
 ---
 
@@ -605,9 +797,15 @@ spec:
 
 ## Conclusion
 
-**APPROACH 1 (Graduated Security with Smart Defaults)** provides the optimal balance of security, operational simplicity, and platform integration for AI workloads. It enables a progressive security implementation that can evolve with organizational maturity while maintaining the operational flexibility required for ZenML MLOps, Argo Workflows, and KubeBlocks database operations.
+**APPROACH 1 (Graduated Security with Smart Defaults)** provides the optimal balance of security, operational simplicity, and platform integration for AI workloads with multi-team MCP server deployment. It enables a progressive security implementation that can evolve with organizational maturity while maintaining the operational flexibility required for:
 
-The layered defense-in-depth architecture ensures multiple security boundaries while the intelligent defaults reduce operational burden. This approach is most suitable for organizations looking to implement zero-trust principles without disrupting existing development workflows.
+- **ZenML dataset development** and deployment to application databases via KubeBlocks
+- **Argo operational workflows** within application namespaces (distinct from CI/CD)
+- **LLM proxy enforcement** preventing direct external API access while enabling controlled AI interactions
+- **MCP server isolation** ensuring team-deployed services are accessed only via Gateway routing
+- **Waypoint proxy mediation** for secure cross-namespace MCP service communication
+
+The layered defense-in-depth architecture ensures multiple security boundaries while the intelligent defaults reduce operational burden. This approach is most suitable for organizations building AI platforms with multiple teams deploying MCP servers and requiring strict LLM access controls without disrupting development workflows.
 
 ---
 
