@@ -123,7 +123,7 @@ graph LR
         
         subgraph "Kgateway Waypoint Proxy Pod"
             AIWP[AI Gateway Container<br/>LLM Egress Proxy]
-            MCPWP[MCP Proxy Container<br/>Cross-Namespace Routing]
+            MCPWP[MCP Proxy Container<br/>Cross-Namespace Router]
             WP[Waypoint Proxy Core<br/>L7 Processing]
         end
     end
@@ -131,11 +131,6 @@ graph LR
     subgraph "MCP Namespaces"
         MCP1[mcp-teamalpha<br/>MCP Server]
         MCP2[mcp-teambeta<br/>MCP Tools]
-        
-        subgraph "MCP Waypoint Pods"
-            WP1[Waypoint Proxy<br/>mcp-teamalpha]
-            WP2[Waypoint Proxy<br/>mcp-teambeta]
-        end
     end
     
     USER --> IGW
@@ -146,10 +141,8 @@ graph LR
     AIWP --> LLM
     
     APP --> MCPWP
-    MCPWP --> WP1
-    MCPWP --> WP2
-    WP1 --> MCP1
-    WP2 --> MCP2
+    MCPWP --> MCP1
+    MCPWP --> MCP2
     
     ARGO -.-> WF
     ARGOEV -.-> WF
@@ -172,15 +165,15 @@ graph LR
     class ARGO,ARGOEV,KB,ZENML,MON system
     class APP,DB,ML,WF app
     class MCP1,MCP2 mcp
-    class WP,WP1,WP2 waypoint
+    class WP waypoint
     class AIWP,MCPWP proxy
 ```
 
 ---
 
-## Three Architectural Approaches (Ranked)
+## Zero-Trust Architecture Implementation
 
-## 🥇 **APPROACH 1: Graduated Security with Smart Defaults** ⭐ **MOST PREFERRED**
+## **Graduated Security with Smart Defaults**
 
 ### Architecture Overview
 Implements progressive security controls that balance zero-trust principles with operational simplicity. Uses intelligent defaults that can be tightened over time.
@@ -268,15 +261,15 @@ spec:
           path: "/v1/chat/completions"  # OpenAI API
         - method: "POST" 
           path: "/v1/messages"          # Anthropic API
-  # Allow communication to MCP namespace waypoint proxies
+  # Allow direct communication to MCP servers (via MCP Proxy container)
   - toEndpoints:
     - matchLabels:
         k8s:io.kubernetes.pod.namespace: mcp-teamalpha
-        gateway.networking.k8s.io/gateway-name: mcp-teamalpha-waypoint
+        app: mcp-server
   - toEndpoints:
     - matchLabels:
         k8s:io.kubernetes.pod.namespace: mcp-teambeta
-        gateway.networking.k8s.io/gateway-name: mcp-teambeta-waypoint
+        app: mcp-server
 ---
 # MCP namespace policy template (applied to all mcp-* namespaces)
 apiVersion: cilium.io/v2
@@ -291,11 +284,11 @@ spec:
   - fromEndpoints:
     - matchLabels:
         k8s:io.kubernetes.pod.namespace: mcp-teamalpha
-  # Allow access from application namespace waypoint MCP proxy containers
+  # Allow direct access from application namespace MCP proxy container
   - fromEndpoints:
     - matchLabels:
         k8s:io.kubernetes.pod.namespace: app-travelexample
-        gateway.networking.k8s.io/gateway-name: app-travelexample-waypoint
+        app.kubernetes.io/component: mcp-proxy
   egress:
   # Allow DNS
   - toServices:
@@ -323,63 +316,100 @@ metadata:
 spec:
   gatewayClassName: kgateway-waypoint
   listeners:
-  - name: mesh
-    port: 15008
-    protocol: HBONE
+  - name: proxy
+    port: 15088
+    protocol: istio.io/PROXY
 ---
-# AI Gateway configuration for LLM egress
-apiVersion: gateway.solo.io/v1
-kind: Gateway
+# AI Gateway configuration using Gateway API Inference Extension
+apiVersion: inference.networking.x-k8s.io/v1alpha2
+kind: InferenceModel
 metadata:
-  name: ai-gateway-config
+  name: external-llm-proxy
   namespace: app-travelexample
 spec:
-  bindAddress: "::"
-  bindPort: 8080
-  proxyNames:
-  - app-travelexample-waypoint
-  httpGateway:
-    virtualServices:
-    - name: llm-egress
-      domains:
-      - "api.openai.com"
-      - "api.anthropic.com"
-      routes:
-      - matchers:
-        - prefix: "/v1/"
-        routeAction:
-          single:
-            upstream:
-              name: external-llm-apis
-              namespace: app-travelexample
-        options:
-          timeout: 30s
-          retryPolicy:
-            retryOn: "5xx"
-            numRetries: 3
+  modelName: "external-llm-gateway"
+  criticality: Critical
+  poolRef:
+    name: external-llm-pool
+  targetModels:
+  - name: openai-gpt4
+    weight: 70
+  - name: anthropic-claude
+    weight: 30
 ---
-# MCP Proxy configuration for cross-namespace routing
-apiVersion: mcp.kgateway.io/v1
-kind: MCPProxy
+# External LLM pool for egress routing
+apiVersion: inference.networking.x-k8s.io/v1alpha2
+kind: InferencePool
 metadata:
-  name: mcp-proxy-config
+  name: external-llm-pool
   namespace: app-travelexample
 spec:
-  routes:
-  - name: team-alpha-tools
-    match:
-      prefix: "/mcp/teamalpha/"
-    destination:
+  targetPortNumber: 443
+  selector:
+    app: external-llm-proxy
+  extensionRef:
+    name: external-llm-endpoint-picker
+---
+# MCP Gateway configuration for cross-namespace routing
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: mcp-cross-namespace-routes
+  namespace: app-travelexample
+spec:
+  parentRefs:
+  - name: app-travelexample-waypoint
+    port: 8080
+  rules:
+  # Route to MCP Team Alpha
+  - matches:
+    - path:
+        type: PathPrefix
+        value: "/mcp/teamalpha/"
+    backendRefs:
+    - name: mcp-server
       namespace: mcp-teamalpha
-      service: mcp-server
       port: 8080
-  - name: team-beta-tools
-    match:
-      prefix: "/mcp/teambeta/"
-    destination:
+  # Route to MCP Team Beta  
+  - matches:
+    - path:
+        type: PathPrefix
+        value: "/mcp/teambeta/"
+    backendRefs:
+    - name: mcp-server
       namespace: mcp-teambeta
-      service: mcp-server
       port: 8080
+---
+# ReferenceGrant to allow cross-namespace access
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: mcp-cross-namespace-access
+  namespace: mcp-teamalpha
+spec:
+  from:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    namespace: app-travelexample
+  to:
+  - group: ""
+    kind: Service
+    name: mcp-server
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: mcp-cross-namespace-access
+  namespace: mcp-teambeta
+spec:
+  from:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    namespace: app-travelexample
+  to:
+  - group: ""
+    kind: Service
+    name: mcp-server
 ---
 # Authorization policy for AI application waypoint
 apiVersion: security.istio.io/v1beta1
@@ -420,43 +450,9 @@ spec:
         methods: ["GET", "POST"]
         paths: ["/mcp/*", "/ai-gateway/*"]
 ---
-# MCP namespace kgateway waypoint
-apiVersion: gateway.networking.k8s.io/v1
-kind: Gateway
-metadata:
-  name: mcp-teamalpha-waypoint
-  namespace: mcp-teamalpha
-  labels:
-    istio.io/waypoint-for: service
-spec:
-  gatewayClassName: kgateway-waypoint
-  listeners:
-  - name: mesh
-    port: 15008
-    protocol: HBONE
----
-# Authorization policy for MCP namespace
-apiVersion: security.istio.io/v1beta1
-kind: AuthorizationPolicy
-metadata:
-  name: mcp-waypoint-access
-  namespace: mcp-teamalpha
-spec:
-  targetRefs:
-  - kind: Gateway
-    name: mcp-teamalpha-waypoint
-  rules:
-  # Only allow access from application namespace waypoint MCP proxy
-  - from:
-    - source:
-        principals: ["cluster.local/ns/app-travelexample/sa/default"]
-    to:
-    - operation:
-        methods: ["GET", "POST"]
-        paths: ["/mcp-services/*"]
-    when:
-    - key: request.headers[x-mcp-proxy]
-      values: ["app-travelexample-waypoint"]
+# Note: MCP namespaces do NOT need waypoint proxies for this architecture
+# The MCP Proxy container in the application namespace waypoint handles
+# cross-namespace routing directly to MCP servers
 ```
 
 #### **4. Gateway API Layer (Ingress - User Traffic Only)**
@@ -529,316 +525,9 @@ spec:
 
 ---
 
-## 🥈 **APPROACH 2: Strict Zero-Trust with Operational Overrides** ⭐ **SECOND PREFERRED**
-
-### Architecture Overview
-Implements strict deny-all policies with explicit allow rules. Uses Kyverno to manage operational complexity through automated policy generation.
-
-### Security Layer Implementation
-
-#### **1. Kyverno Policy Layer**
-```yaml
-# Strict baseline with operational safety nets
-- name: strict-zero-trust-baseline
-  match:
-    resources:
-      kinds: [Namespace]
-      names: ["app-*"]
-  generate:
-    kind: CiliumClusterwideNetworkPolicy
-    name: "deny-all-{{request.object.metadata.name}}"
-    data:
-      spec:
-        nodeSelector:
-          matchLabels:
-            k8s:io.kubernetes.pod.namespace: "{{request.object.metadata.name}}"
-        ingress: []
-        egress:
-        # Allow DNS only
-        - toEndpoints:
-          - matchLabels:
-              k8s:io.kubernetes.pod.namespace: kube-system
-              k8s-app: kube-dns
-```
-
-#### **2. Cilium Network Layer**
-**Default Posture**: Deny-all with explicit operational allows
-
-```yaml
-# Cluster-wide deny policy
-apiVersion: cilium.io/v2
-kind: CiliumClusterwideNetworkPolicy
-metadata:
-  name: default-deny-all
-spec:
-  nodeSelector: {}
-  ingress: []
-  egress:
-  # Allow essential cluster communication
-  - toEntities: ["kube-apiserver"]
-  - toEndpoints:
-    - matchLabels:
-        k8s:io.kubernetes.pod.namespace: kube-system
----
-# Explicit allow for platform services
-apiVersion: cilium.io/v2
-kind: CiliumNetworkPolicy  
-metadata:
-  name: zenml-to-app-access
-  namespace: app-travelexample
-spec:
-  podSelector: {}
-  ingress:
-  - fromEndpoints:
-    - matchLabels:
-        k8s:io.kubernetes.pod.namespace: zenml-system
-        app: zenml-server
-    toPorts:
-    - ports:
-      - port: "8080"
-        protocol: TCP
-      rules:
-        http:
-        - method: "GET"
-          path: "/health"
-        - method: "POST"  
-          path: "/api/v1/models"
-```
-
-#### **3. Istio Ambient Mesh Layer**
-**All namespaces enrolled with waypoint proxies**
-
-```yaml
-# Mandatory waypoint for all app namespaces
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: app-travelexample
-  labels:
-    istio.io/dataplane-mode: ambient
-    istio.io/waypoint: enabled
----
-# Strict authorization with operational exceptions
-apiVersion: security.istio.io/v1beta1
-kind: AuthorizationPolicy
-metadata:
-  name: default-deny-all
-  namespace: app-travelexample
-spec:
-  # No rules = deny all
----
-apiVersion: security.istio.io/v1beta1
-kind: AuthorizationPolicy
-metadata:
-  name: platform-services-access
-  namespace: app-travelexample
-spec:
-  selector:
-    matchLabels:
-      app: travel-ai-service
-  rules:
-  - from:
-    - source:
-        principals: 
-        - "cluster.local/ns/zenml-system/sa/zenml-server"
-        - "cluster.local/ns/argo/sa/argo-workflow"
-    to:
-    - operation:
-        methods: ["GET", "POST"]
-    when:
-    - key: request.headers[x-request-source]
-      values: ["platform"]
-```
-
-### **Benefits:**
-✅ **Maximum Security**: True zero-trust implementation
-✅ **Compliance Ready**: Meets strictest security requirements  
-✅ **Explicit Control**: Every communication path is intentionally configured
-✅ **Incident Containment**: Breaches are highly contained
-
-### **Trade-offs:**
-⚠️ **Operational Complexity**: Requires extensive policy management
-⚠️ **Development Friction**: May slow development workflows
-⚠️ **Troubleshooting Difficulty**: Network issues harder to diagnose
-
----
-
-## 🥉 **APPROACH 3: Service Mesh Centric with Network Policy Backup** ⭐ **LEAST PREFERRED**
-
-### Architecture Overview
-Relies primarily on Istio Ambient Mesh for security controls with Cilium as a backup layer. Emphasizes service identity over network segmentation.
-
-### Security Layer Implementation
-
-#### **1. Cilium Network Layer**
-**Minimal implementation**: Basic namespace isolation only
-
-```yaml
-# Simple namespace-level isolation
-apiVersion: cilium.io/v2
-kind: CiliumNetworkPolicy
-metadata:
-  name: namespace-isolation
-  namespace: app-travelexample
-spec:
-  podSelector: {}
-  ingress:
-  - fromEndpoints:
-    - matchLabels:
-        k8s:io.kubernetes.pod.namespace: app-travelexample
-  # Allow all system namespaces  
-  - fromEndpoints:
-    - matchLabels:
-        k8s:io.kubernetes.pod.namespace: zenml-system
-  - fromEndpoints:
-    - matchLabels:
-        k8s:io.kubernetes.pod.namespace: argo
-  - fromEndpoints:
-    - matchLabels:
-        k8s:io.kubernetes.pod.namespace: kb-system
-```
-
-#### **2. Istio Ambient Mesh Layer**
-**Primary security enforcement**: Comprehensive L7 policies
-
-```yaml
-# All application namespaces enrolled
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: app-travelexample
-  labels:
-    istio.io/dataplane-mode: ambient
----
-# Comprehensive authorization policies
-apiVersion: security.istio.io/v1beta1
-kind: AuthorizationPolicy
-metadata:
-  name: app-access-control
-  namespace: app-travelexample
-spec:
-  rules:
-  - from:
-    - source:
-        namespaces: ["zenml-system"]
-    - source:
-        namespaces: ["argo"]
-        principals: ["cluster.local/ns/argo/sa/argo-workflow"]
-    to:
-    - operation:
-        methods: ["*"]
-  - from:
-    - source:
-        namespaces: ["kb-system"]
-    to:
-    - operation:
-        methods: ["GET", "POST", "PUT", "DELETE"]
-        paths: ["/db/*"]
-```
-
-#### **3. Kyverno Policy Layer**
-**Focus on mesh policy compliance**
-
-```yaml
-# Ensure mesh enrollment
-- name: require-ambient-mesh
-  match:
-    resources:
-      kinds: [Namespace]
-      names: ["app-*"]
-  mutate:
-    patchStrategicMerge:
-      metadata:
-        labels:
-          istio.io/dataplane-mode: ambient
-```
-
-### **Benefits:**
-✅ **Service Identity Focus**: Strong cryptographic identity
-✅ **L7 Visibility**: Rich application-layer controls
-✅ **Mesh Native**: Leverages service mesh capabilities fully
-✅ **Simplified Network Policies**: Less complex L3/L4 rules
-
-### **Trade-offs:**
-⚠️ **Single Point of Failure**: Heavy reliance on service mesh
-⚠️ **Performance Impact**: All traffic through waypoint proxies
-⚠️ **Limited Defense in Depth**: Fewer security layers
-⚠️ **Mesh Complexity**: Difficult troubleshooting when mesh issues occur
-
----
-
-## Implementation Roadmap
-
-### Phase 1: Foundation (Weeks 1-2)
-1. **Kyverno Policy Framework**
-   - Deploy baseline security policies
-   - Implement namespace security standards
-   - Create mutation policies for security labels
-
-2. **Cilium Network Policies**  
-   - Implement chosen approach network policies
-   - Test cross-namespace communication
-   - Validate platform service access
-
-### Phase 2: Service Mesh Security (Weeks 3-4)
-1. **Ambient Mesh Enrollment**
-   - Enroll application namespaces in ambient mesh
-   - Deploy waypoint proxies for critical services
-   - Implement Istio AuthorizationPolicies
-
-2. **Gateway API Security**
-   - Configure ingress traffic filtering
-   - Implement rate limiting and DDoS protection
-   - Add request validation and transformation
-
-### Phase 3: Integration & Testing (Weeks 5-6)
-1. **Platform Integration**
-   - Test ZenML ML pipeline execution
-   - Validate Argo Workflows deployment
-   - Verify KubeBlocks database provisioning
-
-2. **Security Validation**
-   - Conduct penetration testing
-   - Validate policy enforcement
-   - Performance impact assessment
-
-### Phase 4: Monitoring & Refinement (Weeks 7-8)
-1. **Observability Setup**
-   - Configure security metrics collection
-   - Implement policy violation alerting
-   - Dashboard creation for security posture
-
-2. **Policy Refinement**
-   - Adjust policies based on testing results
-   - Optimize performance while maintaining security
-   - Document operational procedures
-
----
-
-## Operational Considerations
-
-### **Monitoring & Observability**
-- **Cilium Hubble**: Network flow visibility and policy enforcement monitoring
-- **Istio Metrics**: Service mesh communication patterns and authorization decisions  
-- **Kyverno Metrics**: Policy compliance and violation tracking
-- **Gateway Metrics**: Ingress traffic patterns and security filtering
-
-### **Day 2 Operations**
-- **Policy Updates**: Version-controlled policy management through GitOps
-- **Troubleshooting**: Layered debugging approach for network connectivity issues
-- **Performance Optimization**: Regular review of policy impact on application performance
-- **Compliance Reporting**: Automated generation of security posture reports
-
-### **Disaster Recovery**
-- **Policy Backup**: Automated backup of all security policies to Git repositories
-- **Emergency Access**: Break-glass procedures for emergency system access
-- **Rollback Procedures**: Ability to quickly revert security policy changes
-
----
-
 ## Conclusion
 
-**APPROACH 1 (Graduated Security with Smart Defaults)** provides the optimal balance of security, operational simplicity, and platform integration for AI workloads with multi-team MCP server deployment. It enables a progressive security implementation that can evolve with organizational maturity while maintaining the operational flexibility required for:
+**Graduated Security with Smart Defaults** provides the optimal balance of security, operational simplicity, and platform integration for AI workloads with multi-team MCP server deployment. It enables a progressive security implementation that can evolve with organizational maturity while maintaining the operational flexibility required for:
 
 - **ZenML dataset development** and deployment to application databases via KubeBlocks
 - **Argo operational workflows** within application namespaces (distinct from CI/CD)
@@ -857,7 +546,7 @@ The layered defense-in-depth architecture ensures multiple security boundaries w
 
 1. **Review and approve** the architectural approach
 2. **Customize policies** for specific AI application requirements  
-3. **Implement Phase 1** foundation components
+3. **Deploy foundational components** (Kyverno, Cilium policies, waypoint proxies)
 4. **Establish monitoring** and observability framework
 5. **Begin gradual rollout** to production workloads
 
