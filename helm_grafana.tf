@@ -238,7 +238,7 @@ resource "null_resource" "update_kiali_for_grafana" {
   
   provisioner "local-exec" {
     command = <<-EOT
-      kubectl patch configmap/kiali -n istio-system --type=merge -p '{"data":{"external_services":"{\"grafana\":{\"enabled\":true,\"in_cluster_url\":\"http://grafana.istio-system:80\",\"url\":\"http://grafana.istio-system:80\"}}"}' --kubeconfig=${path.module}/kubeconfig || true
+      kubectl patch configmap/kiali -n istio-system --type=merge -p '{"data":{"external_services":"{\"grafana\":{\"enabled\":true,\"in_cluster_url\":\"http://grafana.istio-system:80\",\"url\":\"http://grafana.istio-system:80\"}}"}}' --kubeconfig=${path.module}/kubeconfig || true
       kubectl rollout restart deployment/kiali -n istio-system --kubeconfig=${path.module}/kubeconfig
     EOT
   }
