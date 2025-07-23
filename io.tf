@@ -209,4 +209,18 @@ variable "zenml_artifact_bucket_size" {
   default     = 500
 }
 
+# KubeBlocks Operator Configuration
+variable "kubeblocks_version" {
+  description = "Version of KubeBlocks to install"
+  type        = string
+  default     = "1.0.0"
+}
+
+# Gloo Operator Configuration  
+variable "istio_version" {
+  description = "Version of Istio to install via Gloo Operator"
+  type        = string
+  default     = "1.26.2"
+}
+
 

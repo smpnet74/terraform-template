@@ -1,3 +1,7 @@
+# Kiali Service Mesh Observability Feature Module
+# Deploys Kiali for service mesh visualization and optionally a basic Prometheus when Prometheus Operator is disabled
+
+# 1. Deploy Kiali Service Mesh Observability Dashboard
 resource "helm_release" "kiali" {
   name       = "kiali"
   repository = "https://kiali.org/helm-charts"
@@ -46,13 +50,10 @@ resource "helm_release" "kiali" {
     EOT
   ]
   
-  depends_on = [
-    kubectl_manifest.service_mesh_controller,
-    time_sleep.wait_for_service_mesh_controller,
-    helm_release.grafana
-  ]
+  # Dependencies are handled at the module call level
 }
 
+# 2. Deploy basic Prometheus when Prometheus Operator is disabled
 resource "helm_release" "prometheus" {
   count      = var.enable_prometheus_operator ? 0 : 1  # Only deploy when Prometheus Operator is disabled
   name       = "prometheus"
@@ -76,25 +77,34 @@ resource "helm_release" "prometheus" {
     value = "false"
   }
   
-  depends_on = [
-    kubectl_manifest.service_mesh_controller,
-    time_sleep.wait_for_service_mesh_controller
-  ]
+  # Dependencies are handled at the module call level
 }
 
-# Add a wait for Prometheus to be ready before installing Kiali
+# 3. Add a wait for basic Prometheus to be ready before Kiali uses it
 resource "time_sleep" "wait_for_prometheus" {
-  count = var.enable_prometheus_operator ? 0 : 1  # Only when old Prometheus is deployed
+  count = var.enable_prometheus_operator ? 0 : 1  # Only when basic Prometheus is deployed
   depends_on = [helm_release.prometheus[0]]
   create_duration = "30s"
 }
 
-# Update Kiali to depend on Prometheus
+# 4. Update Kiali to depend on basic Prometheus when needed
 resource "null_resource" "kiali_depends_on_prometheus" {
-  count = var.enable_prometheus_operator ? 0 : 1  # Only needed for old Prometheus setup
+  count = var.enable_prometheus_operator ? 0 : 1  # Only needed for basic Prometheus setup
   depends_on = [
     helm_release.prometheus[0],
     time_sleep.wait_for_prometheus[0],
     helm_release.kiali
+  ]
+}
+
+# 5. Configure HTTPRoute for Kiali access via Gateway API
+resource "kubectl_manifest" "kiali_httproute" {
+  yaml_body = templatefile("${path.module}/manifests/kiali-httproute.yaml", {
+    domain_name = var.domain_name
+  })
+
+  depends_on = [
+    helm_release.kiali
+    # Gateway dependencies handled at module level
   ]
 }

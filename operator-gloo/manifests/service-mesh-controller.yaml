@@ -1,0 +1,42 @@
+apiVersion: operator.gloo.solo.io/v1
+kind: ServiceMeshController
+metadata:
+  name: managed-istio
+  labels:
+    app.kubernetes.io/name: managed-istio
+spec:
+  dataplaneMode: Ambient
+  installNamespace: istio-system
+  version: ${istio_version}
+  # Additional configuration for Cilium compatibility
+  values:
+    pilot:
+      env:
+        PILOT_ENABLE_AMBIENT: "true"
+    global:
+      platform: k3s
+    cni:
+      enabled: true
+      chained: true
+      ambient: true
+      cniBinDir: "/opt/cni/bin"
+      cniConfDir: "/etc/cni/net.d"
+      profile: ambient
+    ambient:
+      enabled: true
+      redirectMode: ebpf
+      installWaypointProxyCRD: true
+    meshConfig:
+      defaultConfig:
+        interceptionMode: NONE
+    # Telemetry addons
+    prometheus:
+      enabled: true
+      service:
+        annotations: {}
+    kiali:
+      enabled: true
+      dashboard:
+        auth:
+          strategy: anonymous
+      prometheusAddr: http://prometheus.istio-system:9090

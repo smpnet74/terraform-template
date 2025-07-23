@@ -13,13 +13,3 @@ module "prometheus_operator" {
   ]
 }
 
-# Outputs from Prometheus Operator module
-output "prometheus_operator_info" {
-  description = "Information about the Prometheus Operator monitoring stack"
-  value       = module.prometheus_operator.prometheus_operator_info
-}
-
-output "monitoring_endpoints" {
-  description = "Local port-forward commands for monitoring stack components"
-  value       = module.prometheus_operator.monitoring_endpoints
-}

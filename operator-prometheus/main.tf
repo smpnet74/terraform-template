@@ -83,6 +83,12 @@ resource "helm_release" "prometheus_operator" {
           # Retention policy
           retention = "7d"
           retentionSize = "8GiB"
+          
+          # PVC cleanup policy - delete PVCs when StatefulSet is deleted
+          persistentVolumeClaimRetentionPolicy = {
+            whenDeleted = "Delete"  # Automatically delete PVCs on terraform destroy
+            whenScaled  = "Retain"  # Keep PVCs when scaling down (preserve data)
+          }
         }
       }
       
@@ -115,6 +121,12 @@ resource "helm_release" "prometheus_operator" {
                 }
               }
             }
+          }
+          
+          # PVC cleanup policy - delete PVCs when StatefulSet is deleted
+          persistentVolumeClaimRetentionPolicy = {
+            whenDeleted = "Delete"  # Automatically delete PVCs on terraform destroy
+            whenScaled  = "Retain"  # Keep PVCs when scaling down (preserve data)
           }
         }
       }

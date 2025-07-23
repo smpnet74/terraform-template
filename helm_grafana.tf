@@ -232,7 +232,7 @@ resource "helm_release" "grafana" {
 resource "null_resource" "update_kiali_for_grafana" {
   depends_on = [
     helm_release.grafana,
-    helm_release.kiali,
+    module.kiali,
     local_file.cluster-config
   ]
   

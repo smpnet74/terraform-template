@@ -20,34 +20,8 @@ module "zenml" {
   
   # Dependencies - ensure required infrastructure exists
   depends_on = [
-    helm_release.kubeblocks,
+    module.kubeblocks,
     kubectl_manifest.default_gateway
   ]
 }
 
-# Outputs from ZenML feature
-output "zenml_url" {
-  description = "ZenML UI URL"
-  value       = module.zenml.zenml_url
-}
-
-output "zenml_admin_token" {
-  description = "ZenML admin token"
-  value       = module.zenml.zenml_admin_token
-  sensitive   = true
-}
-
-output "zenml_postgres_host" {
-  description = "ZenML PostgreSQL host"
-  value       = module.zenml.zenml_postgres_host
-}
-
-output "zenml_artifact_bucket_name" {
-  description = "ZenML artifact storage bucket name"
-  value       = module.zenml.zenml_artifact_bucket_name
-}
-
-output "zenml_artifact_bucket_url" {
-  description = "ZenML artifact storage bucket URL"  
-  value       = module.zenml.zenml_artifact_bucket_url
-}

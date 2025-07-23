@@ -19,13 +19,3 @@ module "argoworkflow" {
   ]
 }
 
-# Outputs from Argo Workflows feature
-output "argo_workflows_url" {
-  description = "Argo Workflows UI URL"
-  value       = module.argoworkflow.argo_workflows_url
-}
-
-output "argo_namespace" {
-  description = "Namespace where Argo Workflows is deployed"
-  value       = module.argoworkflow.argo_namespace
-}

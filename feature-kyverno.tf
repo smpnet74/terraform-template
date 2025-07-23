@@ -27,23 +27,3 @@ module "kyverno" {
   ]
 }
 
-# Outputs from Kyverno feature
-output "kyverno_namespace" {
-  description = "Namespace where Kyverno is deployed"
-  value       = module.kyverno.kyverno_namespace
-}
-
-output "policy_reporter_url" {
-  description = "URL to access Policy Reporter UI"
-  value       = module.kyverno.policy_reporter_url
-}
-
-output "kyverno_status_commands" {
-  description = "Commands to check Kyverno status"
-  value       = module.kyverno.kyverno_status_commands
-}
-
-output "kyverno_policy_info" {
-  description = "Information about deployed Kyverno policies"
-  value       = module.kyverno.policy_info
-}
