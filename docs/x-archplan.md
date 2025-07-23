@@ -103,10 +103,8 @@ graph LR
         LLM[LLM APIs<br/>OpenAI/Anthropic]
     end
     
-    subgraph "Gateway Layer"
-        GW[Kgateway<br/>Traffic Filtering]
-        LLMGW[LLM Gateway<br/>Proxy Route]
-        MCPGW[MCP Gateway<br/>Proxy Route]
+    subgraph "Ingress Gateway"
+        IGW[Kgateway Ingress<br/>User Traffic Only]
     end
     
     subgraph "System Namespaces"
@@ -122,28 +120,36 @@ graph LR
         DB[(Application DB<br/>via KubeBlocks)]
         ML[ZenML Dataset<br/>Pipeline]
         WF[Argo Workflow<br/>Operations]
+        
+        subgraph "Kgateway Waypoint Proxy Pod"
+            AIWP[AI Gateway Container<br/>LLM Egress Proxy]
+            MCPWP[MCP Proxy Container<br/>Cross-Namespace Routing]
+            WP[Waypoint Proxy Core<br/>L7 Processing]
+        end
     end
     
     subgraph "MCP Namespaces"
         MCP1[mcp-teamalpha<br/>MCP Server]
         MCP2[mcp-teambeta<br/>MCP Tools]
+        
+        subgraph "MCP Waypoint Pods"
+            WP1[Waypoint Proxy<br/>mcp-teamalpha]
+            WP2[Waypoint Proxy<br/>mcp-teambeta]
+        end
     end
     
-    subgraph "Service Mesh"
-        WP1[Waypoint Proxy<br/>App Namespace]
-        WP2[Waypoint Proxy<br/>MCP Namespaces]
-    end
+    USER --> IGW
+    IGW --> APP
     
-    USER --> GW
-    LLM --> LLMGW
-    GW --> APP
-    LLMGW --> APP
-    MCPGW --> WP1
-    WP1 --> APP
-    WP2 --> MCP1
+    APP --> WP
+    WP --> AIWP
+    AIWP --> LLM
+    
+    APP --> MCPWP
+    MCPWP --> WP1
+    MCPWP --> WP2
+    WP1 --> MCP1
     WP2 --> MCP2
-    APP --> WP1
-    WP1 --> MCPGW
     
     ARGO -.-> WF
     ARGOEV -.-> WF
@@ -154,18 +160,20 @@ graph LR
     WF --> APP
     
     classDef external fill:#e1f5fe
-    classDef gateway fill:#fff3e0
+    classDef ingress fill:#fff3e0
     classDef system fill:#f3e5f5
     classDef app fill:#e8f5e8
     classDef mcp fill:#ffe0e6
-    classDef mesh fill:#f0f8e6
+    classDef waypoint fill:#e6f3ff
+    classDef proxy fill:#f0f8e6
     
     class USER,LLM external
-    class GW,LLMGW,MCPGW gateway
+    class IGW ingress
     class ARGO,ARGOEV,KB,ZENML,MON system
     class APP,DB,ML,WF app
     class MCP1,MCP2 mcp
-    class WP1,WP2 mesh
+    class WP,WP1,WP2 waypoint
+    class AIWP,MCPWP proxy
 ```
 
 ---
@@ -214,7 +222,7 @@ metadata:
 spec:
   podSelector: {}
   ingress:
-  # Allow intra-namespace communication (for Argo Events workflows)
+  # Allow intra-namespace communication (includes waypoint proxy)
   - fromEndpoints:
     - matchLabels:
         k8s:io.kubernetes.pod.namespace: app-travelexample
@@ -233,11 +241,12 @@ spec:
     - matchLabels:
         k8s:io.kubernetes.pod.namespace: kb-system
         app.kubernetes.io/name: kubeblocks
-  # Allow Gateway API traffic (LLM and MCP proxying)
+  # Allow ingress Gateway traffic (user access only)
   - fromEndpoints:
     - matchLabels:
         k8s:io.kubernetes.pod.namespace: kgateway-system
         app.kubernetes.io/name: kgateway
+        gateway-role: ingress
   egress:
   # Allow DNS and system communication
   - toEndpoints:
@@ -247,53 +256,60 @@ spec:
     - k8sService:
         serviceName: kube-dns
         namespace: kube-system
-  # Allow LLM access via Gateway proxy only
-  - toEndpoints:
-    - matchLabels:
-        k8s:io.kubernetes.pod.namespace: kgateway-system
-        app.kubernetes.io/name: kgateway
-  # Deny direct external LLM access
+  # Allow egress to external LLM APIs via waypoint AI Gateway container
   - toEntities: ["world"]
     toPorts:
     - ports:
       - port: "443"
+        protocol: TCP
       rules:
         http:
-        - method: "GET"
-          path: "/health"  # Only health checks allowed
+        - method: "POST"
+          path: "/v1/chat/completions"  # OpenAI API
+        - method: "POST" 
+          path: "/v1/messages"          # Anthropic API
+  # Allow communication to MCP namespace waypoint proxies
+  - toEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: mcp-teamalpha
+        gateway.networking.k8s.io/gateway-name: mcp-teamalpha-waypoint
+  - toEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: mcp-teambeta
+        gateway.networking.k8s.io/gateway-name: mcp-teambeta-waypoint
 ---
-# MCP namespace policy template
+# MCP namespace policy template (applied to all mcp-* namespaces)
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
   name: mcp-namespace-base-policy
-  namespace: mcp-teamalpha  # Applied to all mcp-* namespaces
+  namespace: mcp-teamalpha
 spec:
   podSelector: {}
   ingress:
-  # Allow intra-namespace communication
+  # Allow intra-namespace communication (includes waypoint proxy)
   - fromEndpoints:
     - matchLabels:
         k8s:io.kubernetes.pod.namespace: mcp-teamalpha
-  # Allow access via Gateway MCP proxy only
+  # Allow access from application namespace waypoint MCP proxy containers
   - fromEndpoints:
     - matchLabels:
-        k8s:io.kubernetes.pod.namespace: kgateway-system
-        app.kubernetes.io/name: kgateway
+        k8s:io.kubernetes.pod.namespace: app-travelexample
+        gateway.networking.k8s.io/gateway-name: app-travelexample-waypoint
   egress:
   # Allow DNS
   - toServices:
     - k8sService:
         serviceName: kube-dns
         namespace: kube-system
-  # Deny direct cross-namespace communication
+  # Deny all other egress (MCP servers should be self-contained tools)
 ```
 
 #### **3. Istio Ambient Mesh Layer (L7)**
 **Waypoint Proxy Strategy**: Selective deployment for critical services
 
 ```yaml
-# Waypoint for app-travelexample
+# Kgateway waypoint for app-travelexample with AI and MCP extensions
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
@@ -301,18 +317,75 @@ metadata:
   namespace: app-travelexample
   labels:
     istio.io/waypoint-for: service
+  annotations:
+    kgateway.io/ai-gateway-enabled: "true"
+    kgateway.io/mcp-proxy-enabled: "true"
 spec:
-  gatewayClassName: istio-waypoint
+  gatewayClassName: kgateway-waypoint
   listeners:
   - name: mesh
     port: 15008
     protocol: HBONE
 ---
-# Authorization policy for AI application
+# AI Gateway configuration for LLM egress
+apiVersion: gateway.solo.io/v1
+kind: Gateway
+metadata:
+  name: ai-gateway-config
+  namespace: app-travelexample
+spec:
+  bindAddress: "::"
+  bindPort: 8080
+  proxyNames:
+  - app-travelexample-waypoint
+  httpGateway:
+    virtualServices:
+    - name: llm-egress
+      domains:
+      - "api.openai.com"
+      - "api.anthropic.com"
+      routes:
+      - matchers:
+        - prefix: "/v1/"
+        routeAction:
+          single:
+            upstream:
+              name: external-llm-apis
+              namespace: app-travelexample
+        options:
+          timeout: 30s
+          retryPolicy:
+            retryOn: "5xx"
+            numRetries: 3
+---
+# MCP Proxy configuration for cross-namespace routing
+apiVersion: mcp.kgateway.io/v1
+kind: MCPProxy
+metadata:
+  name: mcp-proxy-config
+  namespace: app-travelexample
+spec:
+  routes:
+  - name: team-alpha-tools
+    match:
+      prefix: "/mcp/teamalpha/"
+    destination:
+      namespace: mcp-teamalpha
+      service: mcp-server
+      port: 8080
+  - name: team-beta-tools
+    match:
+      prefix: "/mcp/teambeta/"
+    destination:
+      namespace: mcp-teambeta
+      service: mcp-server
+      port: 8080
+---
+# Authorization policy for AI application waypoint
 apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy
 metadata:
-  name: app-travelexample-access
+  name: app-travelexample-waypoint-access
   namespace: app-travelexample
 spec:
   targetRefs:
@@ -338,24 +411,16 @@ spec:
     when:
     - key: request.headers[x-workflow-type]
       values: ["operational"]
-  # Allow MCP gateway access via waypoint proxy
+  # Allow internal app access to MCP proxy and AI gateway
   - from:
     - source:
-        principals: ["cluster.local/ns/kgateway-system/sa/kgateway"]
+        principals: ["cluster.local/ns/app-travelexample/sa/default"]
     to:
     - operation:
         methods: ["GET", "POST"]
-        paths: ["/mcp/*"]
-  # Allow LLM gateway access via waypoint proxy
-  - from:
-    - source:
-        principals: ["cluster.local/ns/kgateway-system/sa/kgateway"]
-    to:
-    - operation:
-        methods: ["POST"]
-        paths: ["/llm-proxy/*"]
+        paths: ["/mcp/*", "/ai-gateway/*"]
 ---
-# MCP namespace waypoint and authorization
+# MCP namespace kgateway waypoint
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
@@ -364,44 +429,50 @@ metadata:
   labels:
     istio.io/waypoint-for: service
 spec:
-  gatewayClassName: istio-waypoint
+  gatewayClassName: kgateway-waypoint
   listeners:
   - name: mesh
     port: 15008
     protocol: HBONE
 ---
+# Authorization policy for MCP namespace
 apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy
 metadata:
-  name: mcp-gateway-only-access
+  name: mcp-waypoint-access
   namespace: mcp-teamalpha
 spec:
   targetRefs:
   - kind: Gateway
     name: mcp-teamalpha-waypoint
   rules:
-  # Only allow access via Gateway MCP proxy
+  # Only allow access from application namespace waypoint MCP proxy
   - from:
     - source:
-        principals: ["cluster.local/ns/kgateway-system/sa/kgateway"]
+        principals: ["cluster.local/ns/app-travelexample/sa/default"]
     to:
     - operation:
         methods: ["GET", "POST"]
+        paths: ["/mcp-services/*"]
+    when:
+    - key: request.headers[x-mcp-proxy]
+      values: ["app-travelexample-waypoint"]
 ```
 
-#### **4. Gateway API Layer (Ingress)**
+#### **4. Gateway API Layer (Ingress - User Traffic Only)**
 ```yaml
-# HTTPRoute with security filtering and LLM/MCP proxying
+# HTTPRoute for external user traffic only (no LLM/MCP routing)
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:  
-  name: app-travelexample-route
+  name: app-travelexample-ingress
 spec:
   parentRefs:
   - name: default-gateway
+    namespace: kgateway-system
   hostnames: ["travel.example.com"]
   rules:
-  # Application API routes
+  # Application API routes for external users
   - matches:
     - path:
         type: PathPrefix
@@ -412,79 +483,49 @@ spec:
         add:
         - name: X-Request-Source
           value: external
+        - name: X-Gateway-Type
+          value: ingress
     backendRefs:
     - name: travel-api
       port: 8080
-  # LLM proxy routes (block direct external access)
+  # Web UI routes
   - matches:
     - path:
         type: PathPrefix
-        value: "/llm-proxy/"
+        value: "/"
     filters:
     - type: RequestHeaderModifier
       requestHeaderModifier:
         add:
-        - name: X-LLM-Proxy
-          value: "true"
+        - name: X-Request-Source
+          value: external-web
     backendRefs:
-    - name: llm-proxy-service
-      port: 8080
-  # MCP gateway routes (cross-namespace MCP access)
-  - matches:
-    - path:
-        type: PathPrefix
-        value: "/mcp/"
-    filters:
-    - type: RequestHeaderModifier
-      requestHeaderModifier:
-        add:
-        - name: X-MCP-Gateway
-          value: "true"
-    backendRefs:
-    - name: mcp-gateway-service
-      port: 8080
+    - name: travel-web-ui
+      port: 3000
 ---
-# MCP namespace HTTPRoute (accessed via Gateway only)
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: mcp-teamalpha-internal
-  namespace: mcp-teamalpha
-spec:
-  parentRefs:
-  - name: default-gateway
-    namespace: kgateway-system
-  hostnames: ["mcp-teamalpha.internal"]
-  rules:
-  - matches:
-    - path:
-        type: PathPrefix
-        value: "/mcp-services/"
-    filters:
-    - type: RequestHeaderModifier
-      requestHeaderModifier:
-        add:
-        - name: X-MCP-Namespace
-          value: mcp-teamalpha
-    backendRefs:
-    - name: mcp-server
-      port: 8080
+# Note: LLM and MCP traffic is NOT routed through ingress gateway
+# - LLM egress is handled by AI Gateway container in waypoint proxy
+# - MCP cross-namespace communication is handled by MCP Proxy container in waypoint proxy
+# - This separation ensures proper security boundaries and traffic isolation
 ```
 
 ### **Benefits:**
 ✅ **Operational Simplicity**: Gradual security implementation with intelligent defaults
 ✅ **Developer Friendly**: Clear security boundaries without blocking development workflows
 ✅ **Platform Integration**: Seamless ZenML dataset development, Argo operational workflows, and KubeBlocks database provisioning
-✅ **LLM Security**: Enforced proxy access prevents direct external LLM API calls
-✅ **MCP Isolation**: Teams can deploy MCP servers with guaranteed gateway-only access
-✅ **Scalability**: Policies automatically scale with namespace and team growth
-✅ **Auditability**: Clear security posture progression with comprehensive logging
+✅ **AI Gateway Security**: Kgateway waypoint AI container enforces controlled LLM egress with retry/timeout policies
+✅ **MCP Isolation**: Teams deploy MCP servers with waypoint proxy-mediated access (no direct cross-namespace communication)
+✅ **Traffic Separation**: Ingress (user traffic) completely separated from egress (LLM) and east-west (MCP) traffic flows
+✅ **Waypoint-Based Architecture**: Leverages Kgateway waypoint proxies for both AI Gateway and MCP Proxy functionality
+✅ **Scalability**: Policies and waypoint configurations automatically scale with namespace and team growth
+✅ **Auditability**: Comprehensive logging of all LLM egress and MCP cross-namespace communication
 
 ### **Trade-offs:**
 ⚠️ **Initial Permissiveness**: May allow some unnecessary communication initially
 ⚠️ **Complexity Growth**: Requires ongoing policy refinement as teams and MCP services expand
-⚠️ **Gateway Dependency**: LLM and MCP access depends on Gateway API routing reliability
-⚠️ **Waypoint Proxy Overhead**: L7 processing adds latency for MCP service interactions
+⚠️ **Waypoint Dependency**: LLM egress and MCP access depends on Kgateway waypoint proxy reliability
+⚠️ **Proxy Container Overhead**: AI Gateway and MCP Proxy containers add resource consumption to waypoint pods
+⚠️ **Configuration Complexity**: Multiple CRDs required (Gateway, MCPProxy, AI Gateway config) for full functionality
 
 ---
 
@@ -801,11 +842,14 @@ spec:
 
 - **ZenML dataset development** and deployment to application databases via KubeBlocks
 - **Argo operational workflows** within application namespaces (distinct from CI/CD)
-- **LLM proxy enforcement** preventing direct external API access while enabling controlled AI interactions
-- **MCP server isolation** ensuring team-deployed services are accessed only via Gateway routing
-- **Waypoint proxy mediation** for secure cross-namespace MCP service communication
+- **Kgateway AI Gateway containers** in waypoint proxies enforcing controlled LLM egress with retry/timeout policies
+- **Kgateway MCP Proxy containers** in waypoint proxies enabling secure cross-namespace MCP service communication
+- **Complete traffic separation** between ingress (user), egress (LLM), and east-west (MCP) traffic flows
+- **Waypoint-based architecture** leveraging Kgateway's AI and MCP extensions for enterprise-grade proxy functionality
 
-The layered defense-in-depth architecture ensures multiple security boundaries while the intelligent defaults reduce operational burden. This approach is most suitable for organizations building AI platforms with multiple teams deploying MCP servers and requiring strict LLM access controls without disrupting development workflows.
+The layered defense-in-depth architecture ensures multiple security boundaries while the intelligent waypoint proxy configuration reduces operational burden. This approach is most suitable for organizations building AI platforms where teams deploy MCP servers requiring controlled cross-namespace access, applications need governed LLM egress, and strict traffic separation is mandatory without disrupting development workflows.
+
+**Key Architectural Insight**: By positioning AI Gateway and MCP Proxy as containers within Kgateway waypoint proxies rather than separate services, this approach provides enterprise-grade functionality while maintaining the simplicity of the Istio Ambient Mesh model with enhanced Kgateway capabilities.
 
 ---
 
