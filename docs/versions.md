@@ -30,7 +30,7 @@ This document provides a comprehensive and accurate list of all components and t
 |---|---|---|
 | Kyverno | `1.14.4` | The policy engine for Kubernetes. Deployed via Helm chart `v3.4.4`. |
 | Kyverno Policies | Chart `v3.4.4` | A set of pre-built security policies for pod security standards. |
-| Policy Reporter | Chart `v2.22.0` | A web-based UI for observing and managing Kyverno policy reports. |
+| Policy Reporter | Chart `v3.3.1` | A web-based UI for observing and managing Kyverno policy reports. |
 
 ## CI/CD & Workflows
 

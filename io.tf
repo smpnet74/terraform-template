@@ -144,7 +144,7 @@ variable "enable_policy_reporter_ui" {
 variable "policy_reporter_chart_version" {
   description = "Version of the Policy Reporter Helm chart"
   type        = string
-  default     = "2.22.0"  # Latest stable version with UI support
+  default     = "3.3.1"   # Latest stable version with UI support
 }
 
 # Prometheus Operator Configuration

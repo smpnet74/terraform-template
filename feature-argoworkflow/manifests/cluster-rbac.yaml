@@ -1,0 +1,203 @@
+# Cluster-wide RBAC for Argo Workflows and Events
+# These resources provide additional cluster-scoped permissions
+
+---
+# ClusterRole for Argo Workflow Controller - Enhanced cluster-wide permissions
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: argo-workflow-controller-cluster
+  labels:
+    app.kubernetes.io/component: workflow-controller
+    app.kubernetes.io/name: argo-workflows
+    app.kubernetes.io/part-of: argo
+rules:
+# Core Kubernetes resources across all namespaces
+- apiGroups: [""]
+  resources: ["pods", "pods/exec", "pods/log", "pods/attach"]
+  verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+- apiGroups: [""]
+  resources: ["events", "serviceaccounts", "secrets", "configmaps"]
+  verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims", "persistentvolumes"]
+  verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+# Apps resources
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets", "daemonsets", "statefulsets"]
+  verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+# Argo Workflows resources
+- apiGroups: ["argoproj.io"]
+  resources: ["workflows", "workflows/finalizers", "workflowtemplates", "cronworkflows", "clusterworkflowtemplates"]
+  verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+# Policy resources
+- apiGroups: ["policy"]
+  resources: ["poddisruptionbudgets"]
+  verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+# Networking resources
+- apiGroups: ["networking.k8s.io"]
+  resources: ["networkpolicies"]
+  verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+# Metrics and monitoring
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["pods", "nodes"]
+  verbs: ["get", "list"]
+
+---
+# ClusterRoleBinding for Argo Workflow Controller
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: argo-workflow-controller-cluster
+  labels:
+    app.kubernetes.io/component: workflow-controller
+    app.kubernetes.io/name: argo-workflows
+    app.kubernetes.io/part-of: argo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: argo-workflow-controller-cluster
+subjects:
+- kind: ServiceAccount
+  name: argo-workflow-controller
+  namespace: ${argo_namespace}
+
+---
+# ClusterRole for Argo Server - Read access across all namespaces
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: argo-server-cluster
+  labels:
+    app.kubernetes.io/component: server
+    app.kubernetes.io/name: argo-workflows
+    app.kubernetes.io/part-of: argo
+rules:
+# Read access to core resources
+- apiGroups: [""]
+  resources: ["pods", "pods/exec", "pods/log", "events", "serviceaccounts", "secrets", "configmaps"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets"]
+  verbs: ["get", "list", "watch"]
+# Full access to Argo resources
+- apiGroups: ["argoproj.io"]
+  resources: ["workflows", "workflowtemplates", "cronworkflows", "clusterworkflowtemplates"]
+  verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+# Metrics access
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["pods", "nodes"]
+  verbs: ["get", "list"]
+
+---
+# ClusterRoleBinding for Argo Server
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: argo-server-cluster
+  labels:
+    app.kubernetes.io/component: server
+    app.kubernetes.io/name: argo-workflows
+    app.kubernetes.io/part-of: argo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: argo-server-cluster
+subjects:
+- kind: ServiceAccount
+  name: argo-server
+  namespace: ${argo_namespace}
+
+---
+# ClusterRole for Argo Events EventSource Controller
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: argo-events-eventsource-controller-cluster
+  labels:
+    app.kubernetes.io/component: eventsource-controller
+    app.kubernetes.io/name: argo-events
+    app.kubernetes.io/part-of: argo
+rules:
+# Core resources
+- apiGroups: [""]
+  resources: ["events", "configmaps", "secrets", "services", "pods", "serviceaccounts"]
+  verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+# Apps resources
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets"]
+  verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+# Argo Events resources
+- apiGroups: ["argoproj.io"]
+  resources: ["eventsources", "sensors", "eventbus"]
+  verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+# Argo Workflows integration
+- apiGroups: ["argoproj.io"]
+  resources: ["workflows", "workflowtemplates"]
+  verbs: ["create", "get", "list", "watch", "update", "patch"]
+
+---
+# ClusterRoleBinding for Argo Events EventSource Controller
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: argo-events-eventsource-controller-cluster
+  labels:
+    app.kubernetes.io/component: eventsource-controller
+    app.kubernetes.io/name: argo-events
+    app.kubernetes.io/part-of: argo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: argo-events-eventsource-controller-cluster
+subjects:
+- kind: ServiceAccount
+  name: argo-events-eventsource-controller
+  namespace: ${argo_namespace}
+
+---
+# ClusterRole for Argo Events Sensor Controller
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: argo-events-sensor-controller-cluster
+  labels:
+    app.kubernetes.io/component: sensor-controller
+    app.kubernetes.io/name: argo-events
+    app.kubernetes.io/part-of: argo
+rules:
+# Core resources
+- apiGroups: [""]
+  resources: ["events", "configmaps", "secrets", "services", "pods", "serviceaccounts"]
+  verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+# Apps resources
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets"]
+  verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+# Argo Events resources
+- apiGroups: ["argoproj.io"]
+  resources: ["sensors", "eventsources", "eventbus"]
+  verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+# Argo Workflows integration - sensors can trigger workflows
+- apiGroups: ["argoproj.io"]
+  resources: ["workflows", "workflowtemplates", "clusterworkflowtemplates"]
+  verbs: ["create", "get", "list", "watch", "update", "patch"]
+
+---
+# ClusterRoleBinding for Argo Events Sensor Controller
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: argo-events-sensor-controller-cluster
+  labels:
+    app.kubernetes.io/component: sensor-controller
+    app.kubernetes.io/name: argo-events
+    app.kubernetes.io/part-of: argo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: argo-events-sensor-controller-cluster
+subjects:
+- kind: ServiceAccount
+  name: argo-events-sensor-controller
+  namespace: ${argo_namespace}

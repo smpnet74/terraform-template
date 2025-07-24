@@ -1,13 +1,67 @@
+# EventBus Configuration for Cluster-Wide Argo Events
+# Provides scalable, persistent event streaming across all namespaces
 apiVersion: argoproj.io/v1alpha1
 kind: EventBus
 metadata:
   name: default
   namespace: ${argo_namespace}
+  labels:
+    app.kubernetes.io/name: argo-events
+    app.kubernetes.io/component: eventbus
+    app.kubernetes.io/part-of: argo
 spec:
   jetstream:
+    # JetStream version for event streaming
     version: "${jetstream_version}"
+    # High availability with 3 replicas for cluster-wide reliability
     replicas: 3
+    # Enhanced persistence configuration
     persistence:
       storageClassName: "civo-volume"
       accessMode: ReadWriteOnce
-      volumeSize: 10Gi
+      volumeSize: 20Gi  # Increased size for cluster-wide events
+    # Resource limits for stable cluster-wide operations
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "200m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+    # JetStream configuration for cluster-wide event handling
+    settings:
+      # Maximum memory for stream storage
+      maxMemoryStore: 1073741824  # 1GB
+      # Maximum file storage
+      maxFileStore: 10737418240   # 10GB
+      # Enable clustering for high availability
+      cluster:
+        enabled: true
+        replicas: 3
+      # Stream retention policy
+      retention:
+        maxAge: "24h"      # Keep events for 24 hours
+        maxMsgs: 1000000   # Maximum 1M messages
+        maxBytes: 5368709120  # Maximum 5GB
+    # Security context for enhanced security
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      fsGroup: 1000
+    # Anti-affinity for better distribution across nodes
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                - argo-events
+              - key: app.kubernetes.io/component
+                operator: In
+                values:
+                - eventbus
+            topologyKey: kubernetes.io/hostname

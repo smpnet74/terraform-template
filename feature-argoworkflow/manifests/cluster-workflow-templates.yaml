@@ -1,0 +1,347 @@
+# Cluster-Wide Workflow Templates for Common CI/CD Patterns
+# These templates can be used across all namespaces in the cluster
+
+---
+# Generic container build and deploy template
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterWorkflowTemplate
+metadata:
+  name: container-build-deploy
+  labels:
+    app.kubernetes.io/name: argo-workflows
+    app.kubernetes.io/component: cluster-workflow-template
+    workflows.argoproj.io/cluster-template: "true"
+spec:
+  templates:
+  - name: build-container
+    inputs:
+      parameters:
+      - name: repo-url
+        description: "Git repository URL"
+      - name: branch
+        description: "Git branch to build"
+        default: "main"
+      - name: dockerfile-path
+        description: "Path to Dockerfile"
+        default: "Dockerfile"
+      - name: image-name
+        description: "Container image name"
+      - name: image-tag
+        description: "Container image tag"
+        default: "latest"
+    container:
+      image: gcr.io/kaniko-project/executor:latest
+      command: ["/kaniko/executor"]
+      args:
+      - "--dockerfile={{inputs.parameters.dockerfile-path}}"
+      - "--context={{inputs.parameters.repo-url}}#{{inputs.parameters.branch}}"
+      - "--destination={{inputs.parameters.image-name}}:{{inputs.parameters.image-tag}}"
+      - "--cache=true"
+      - "--compressed-caching=false"
+      volumeMounts:
+      - name: docker-config
+        mountPath: /kaniko/.docker/
+        readOnly: true
+    volumes:
+    - name: docker-config
+      secret:
+        secretName: docker-config
+        optional: true
+
+  - name: deploy-to-kubernetes
+    inputs:
+      parameters:
+      - name: namespace
+        description: "Target namespace for deployment"
+      - name: manifest-path
+        description: "Path to Kubernetes manifests"
+      - name: image-name
+        description: "Container image name to deploy"
+      - name: image-tag
+        description: "Container image tag to deploy"
+    container:
+      image: bitnami/kubectl:latest
+      command: ["/bin/bash"]
+      args:
+      - -c
+      - |
+        # Apply Kubernetes manifests with image substitution
+        kubectl apply -f {{inputs.parameters.manifest-path}} -n {{inputs.parameters.namespace}}
+        kubectl set image deployment/app container={{inputs.parameters.image-name}}:{{inputs.parameters.image-tag}} -n {{inputs.parameters.namespace}}
+        kubectl rollout status deployment/app -n {{inputs.parameters.namespace}}
+
+---
+# Database migration workflow template
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterWorkflowTemplate
+metadata:
+  name: database-migration
+  labels:
+    app.kubernetes.io/name: argo-workflows
+    app.kubernetes.io/component: cluster-workflow-template
+    workflows.argoproj.io/cluster-template: "true"
+spec:
+  templates:
+  - name: run-migration
+    inputs:
+      parameters:
+      - name: database-type
+        description: "Database type (postgres, mysql, mongodb)"
+      - name: database-host
+        description: "Database host"
+      - name: database-name
+        description: "Database name"
+      - name: migration-script
+        description: "Migration script content or path"
+      - name: namespace
+        description: "Namespace containing database secrets"
+    container:
+      image: "{{inputs.parameters.database-type}}:latest"
+      command: ["/bin/bash"]
+      args:
+      - -c
+      - |
+        case "{{inputs.parameters.database-type}}" in
+          "postgres")
+            export PGPASSWORD="$${DATABASE_PASSWORD}"
+            psql -h {{inputs.parameters.database-host}} -U $${DATABASE_USER} -d {{inputs.parameters.database-name}} -c "{{inputs.parameters.migration-script}}"
+            ;;
+          "mysql")
+            mysql -h {{inputs.parameters.database-host}} -u $${DATABASE_USER} -p$${DATABASE_PASSWORD} {{inputs.parameters.database-name}} -e "{{inputs.parameters.migration-script}}"
+            ;;
+          "mongodb")
+            mongo --host {{inputs.parameters.database-host}} --username $${DATABASE_USER} --password $${DATABASE_PASSWORD} {{inputs.parameters.database-name}} --eval "{{inputs.parameters.migration-script}}"
+            ;;
+        esac
+      env:
+      - name: DATABASE_USER
+        valueFrom:
+          secretKeyRef:
+            name: database-credentials
+            key: username
+      - name: DATABASE_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: database-credentials
+            key: password
+
+---
+# Testing workflow template
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterWorkflowTemplate
+metadata:
+  name: run-tests
+  labels:
+    app.kubernetes.io/name: argo-workflows
+    app.kubernetes.io/component: cluster-workflow-template
+    workflows.argoproj.io/cluster-template: "true"
+spec:
+  templates:
+  - name: unit-tests
+    inputs:
+      parameters:
+      - name: repo-url
+        description: "Git repository URL"
+      - name: branch
+        description: "Git branch to test"
+        default: "main"
+      - name: test-command
+        description: "Command to run tests"
+        default: "npm test"
+      - name: runtime-image
+        description: "Runtime image for tests"
+        default: "node:18"
+    container:
+      image: "{{inputs.parameters.runtime-image}}"
+      command: ["/bin/bash"]
+      args:
+      - -c
+      - |
+        git clone {{inputs.parameters.repo-url}} /workspace
+        cd /workspace
+        git checkout {{inputs.parameters.branch}}
+        {{inputs.parameters.test-command}}
+      workingDir: /workspace
+
+  - name: integration-tests
+    inputs:
+      parameters:
+      - name: repo-url
+        description: "Git repository URL"
+      - name: branch
+        description: "Git branch to test"
+        default: "main"
+      - name: test-command
+        description: "Command to run integration tests"
+        default: "npm run test:integration"
+      - name: runtime-image
+        description: "Runtime image for tests"
+        default: "node:18"
+      - name: dependencies
+        description: "Additional services needed for testing"
+        default: "[]"
+    container:
+      image: "{{inputs.parameters.runtime-image}}"
+      command: ["/bin/bash"]
+      args:
+      - -c
+      - |
+        git clone {{inputs.parameters.repo-url}} /workspace
+        cd /workspace
+        git checkout {{inputs.parameters.branch}}
+        # Start any required dependencies
+        {{inputs.parameters.test-command}}
+      workingDir: /workspace
+
+---
+# Security scanning workflow template
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterWorkflowTemplate
+metadata:
+  name: security-scan
+  labels:
+    app.kubernetes.io/name: argo-workflows
+    app.kubernetes.io/component: cluster-workflow-template
+    workflows.argoproj.io/cluster-template: "true"
+spec:
+  templates:
+  - name: container-scan
+    inputs:
+      parameters:
+      - name: image-name
+        description: "Container image to scan"
+      - name: severity-threshold
+        description: "Severity threshold for vulnerabilities"
+        default: "HIGH"
+    container:
+      image: aquasec/trivy:latest
+      command: ["trivy"]
+      args:
+      - "image"
+      - "--severity"
+      - "{{inputs.parameters.severity-threshold}}"
+      - "--exit-code"
+      - "1"
+      - "{{inputs.parameters.image-name}}"
+
+  - name: code-scan
+    inputs:
+      parameters:
+      - name: repo-url
+        description: "Git repository URL to scan"
+      - name: branch
+        description: "Git branch to scan"
+        default: "main"
+    container:
+      image: securecodewarrior/semgrep:latest
+      command: ["/bin/bash"]
+      args:
+      - -c
+      - |
+        git clone {{inputs.parameters.repo-url}} /workspace
+        cd /workspace
+        git checkout {{inputs.parameters.branch}}
+        semgrep --config=auto --json --output=/tmp/results.json .
+        cat /tmp/results.json
+      workingDir: /workspace
+
+---
+# Backup and restore workflow template
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterWorkflowTemplate
+metadata:
+  name: backup-restore
+  labels:
+    app.kubernetes.io/name: argo-workflows
+    app.kubernetes.io/component: cluster-workflow-template
+    workflows.argoproj.io/cluster-template: "true"
+spec:
+  templates:
+  - name: backup-database
+    inputs:
+      parameters:
+      - name: database-type
+        description: "Database type (postgres, mysql, mongodb)"
+      - name: database-host
+        description: "Database host"
+      - name: database-name
+        description: "Database name"
+      - name: backup-location
+        description: "S3 or storage location for backup"
+      - name: namespace
+        description: "Namespace containing database secrets"
+    container:
+      image: "{{inputs.parameters.database-type}}:latest"
+      command: ["/bin/bash"]
+      args:
+      - -c
+      - |
+        TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+        BACKUP_FILE="{{inputs.parameters.database-name}}_$${TIMESTAMP}.sql"
+        
+        case "{{inputs.parameters.database-type}}" in
+          "postgres")
+            export PGPASSWORD="$${DATABASE_PASSWORD}"
+            pg_dump -h {{inputs.parameters.database-host}} -U $${DATABASE_USER} {{inputs.parameters.database-name}} > /tmp/$${BACKUP_FILE}
+            ;;
+          "mysql")
+            mysqldump -h {{inputs.parameters.database-host}} -u $${DATABASE_USER} -p$${DATABASE_PASSWORD} {{inputs.parameters.database-name}} > /tmp/$${BACKUP_FILE}
+            ;;
+        esac
+        
+        # Upload to storage (assuming AWS CLI is available)
+        aws s3 cp /tmp/$${BACKUP_FILE} {{inputs.parameters.backup-location}}/$${BACKUP_FILE}
+      env:
+      - name: DATABASE_USER
+        valueFrom:
+          secretKeyRef:
+            name: database-credentials
+            key: username
+      - name: DATABASE_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: database-credentials
+            key: password
+
+  - name: restore-database
+    inputs:
+      parameters:
+      - name: database-type
+        description: "Database type (postgres, mysql, mongodb)"
+      - name: database-host
+        description: "Database host"
+      - name: database-name
+        description: "Database name"
+      - name: backup-file
+        description: "Backup file location"
+      - name: namespace
+        description: "Namespace containing database secrets"
+    container:
+      image: "{{inputs.parameters.database-type}}:latest"
+      command: ["/bin/bash"]
+      args:
+      - -c
+      - |
+        # Download backup file
+        aws s3 cp {{inputs.parameters.backup-file}} /tmp/restore.sql
+        
+        case "{{inputs.parameters.database-type}}" in
+          "postgres")
+            export PGPASSWORD="$${DATABASE_PASSWORD}"
+            psql -h {{inputs.parameters.database-host}} -U $${DATABASE_USER} {{inputs.parameters.database-name}} < /tmp/restore.sql
+            ;;
+          "mysql")
+            mysql -h {{inputs.parameters.database-host}} -u $${DATABASE_USER} -p$${DATABASE_PASSWORD} {{inputs.parameters.database-name}} < /tmp/restore.sql
+            ;;
+        esac
+      env:
+      - name: DATABASE_USER
+        valueFrom:
+          secretKeyRef:
+            name: database-credentials
+            key: username
+      - name: DATABASE_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: database-credentials
+            key: password

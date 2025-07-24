@@ -250,9 +250,10 @@ resource "kubectl_manifest" "zenml_servicemonitor" {
 }
 
 # 14. Update Kyverno policies to exclude zenml-system namespace
-resource "kubectl_manifest" "kyverno_zenml_exclusion" {
-  count = var.enable_zenml && var.enable_kyverno ? 1 : 0
-  yaml_body = templatefile("${path.module}/manifests/kyverno-zenml-policy.yaml", {
-    zenml_namespace = var.zenml_namespace
-  })
-}
+# NOTE: Disabled - zenml-system is already excluded in main Kyverno policy configuration
+# resource "kubectl_manifest" "kyverno_zenml_exclusion" {
+#   count = var.enable_zenml && var.enable_kyverno ? 1 : 0
+#   yaml_body = templatefile("${path.module}/manifests/kyverno-zenml-policy.yaml", {
+#     zenml_namespace = var.zenml_namespace
+#   })
+# }

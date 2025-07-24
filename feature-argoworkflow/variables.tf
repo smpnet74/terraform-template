@@ -1,10 +1,10 @@
 variable "enable_argo_workflows" {
-  description = "Enable Argo Workflows deployment"
+  description = "Enable cluster-wide Argo Workflows and Events deployment"
   type        = bool
 }
 
 variable "argo_namespace" {
-  description = "Namespace for Argo Workflows and Events"
+  description = "Namespace for Argo Workflows and Events control plane (workflows can run in any namespace)"
   type        = string
   default     = "argo"
 }
