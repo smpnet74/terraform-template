@@ -102,3 +102,30 @@ resource "helm_release" "kubeblocks" {
     kubernetes_namespace.kb_system
   ]
 }
+
+# Wait for KubeBlocks to be ready before installing addons
+resource "time_sleep" "wait_for_kubeblocks_ready" {
+  depends_on = [helm_release.kubeblocks]
+  create_duration = "60s"
+}
+
+# Deploy Neo4j addon for KubeBlocks via Helm (if enabled)
+resource "helm_release" "neo4j_addon" {
+  count      = var.enable_neo4j_addon ? 1 : 0
+  name       = "kb-addon-neo4j"
+  repository = "https://apecloud.github.io/helm-charts"
+  chart      = "neo4j"
+  version    = "1.0.0"
+  namespace  = "kb-system"
+  
+  # Wait for KubeBlocks to be ready before installing addons
+  depends_on = [
+    time_sleep.wait_for_kubeblocks_ready
+  ]
+  
+  # Add timeout for addon installation
+  timeout = 600
+  
+  # Force addon installation even if it exists
+  replace = true
+}

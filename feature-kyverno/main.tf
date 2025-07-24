@@ -247,52 +247,30 @@ resource "helm_release" "kyverno_policies" {
   ]
 }
 
-# 5. Deploy custom cluster policies using manifests
-resource "kubectl_manifest" "kyverno_gateway_api_httproute_policy" {
-  count = var.enable_kyverno ? 1 : 0
-  yaml_body = templatefile("${path.module}/manifests/gateway-api-httproute-policy.yaml", {
-    domain_name = var.domain_name
-  })
+# 5. Deploy custom cluster policies using manifests (for future use)
+# These policies will only be deployed when the manifest files contain actual policy definitions
 
-  depends_on = [
-    null_resource.verify_kyverno_webhooks
-    # Gateway dependencies handled at module level
-  ]
-}
-
-resource "kubectl_manifest" "kyverno_cilium_networkpolicy_governance" {
-  count = var.enable_kyverno ? 1 : 0
-  yaml_body = file("${path.module}/manifests/cilium-networkpolicy-governance.yaml")
+resource "kubectl_manifest" "kyverno_custom_kgateway_policy" {
+  count = var.enable_kyverno && length(trimspace(file("${path.module}/manifests/custom-policy-kgateway.yaml"))) > 10 ? 1 : 0
+  yaml_body = file("${path.module}/manifests/custom-policy-kgateway.yaml")
 
   depends_on = [
     null_resource.verify_kyverno_webhooks
   ]
 }
 
-resource "kubectl_manifest" "kyverno_istio_ambient_preparation" {
-  count = var.enable_kyverno ? 1 : 0
-  yaml_body = file("${path.module}/manifests/istio-ambient-preparation.yaml")
+resource "kubectl_manifest" "kyverno_custom_network_policy" {
+  count = var.enable_kyverno && length(trimspace(file("${path.module}/manifests/custom-policy-network.yaml"))) > 10 ? 1 : 0
+  yaml_body = file("${path.module}/manifests/custom-policy-network.yaml")
 
   depends_on = [
     null_resource.verify_kyverno_webhooks
   ]
 }
 
-resource "kubectl_manifest" "kyverno_cloudflare_certificate_policy" {
-  count = var.enable_kyverno ? 1 : 0
-  yaml_body = file("${path.module}/manifests/cloudflare-certificate-policy.yaml")
-
-  depends_on = [
-    null_resource.verify_kyverno_webhooks
-    # Gateway dependencies handled at module level
-  ]
-}
-
-resource "kubectl_manifest" "kyverno_resource_requirements" {
-  count = var.enable_kyverno ? 1 : 0
-  yaml_body = templatefile("${path.module}/manifests/resource-requirements-policy.yaml", {
-    kyverno_policy_exclusions = var.kyverno_policy_exclusions
-  })
+resource "kubectl_manifest" "kyverno_custom_waypoint_policy" {
+  count = var.enable_kyverno && length(trimspace(file("${path.module}/manifests/custom-policy-waypoint.yaml"))) > 10 ? 1 : 0
+  yaml_body = file("${path.module}/manifests/custom-policy-waypoint.yaml")
 
   depends_on = [
     null_resource.verify_kyverno_webhooks

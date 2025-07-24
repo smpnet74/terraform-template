@@ -216,6 +216,12 @@ variable "kubeblocks_version" {
   default     = "1.0.0"
 }
 
+variable "enable_neo4j_addon" {
+  description = "Enable Neo4j addon for KubeBlocks"
+  type        = bool
+  default     = false
+}
+
 # Gloo Operator Configuration  
 variable "istio_version" {
   description = "Version of Istio to install via Gloo Operator"

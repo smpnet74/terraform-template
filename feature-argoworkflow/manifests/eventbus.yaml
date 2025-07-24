@@ -28,21 +28,7 @@ spec:
       limits:
         memory: "1Gi"
         cpu: "500m"
-    # JetStream configuration for cluster-wide event handling
-    settings:
-      # Maximum memory for stream storage
-      maxMemoryStore: 1073741824  # 1GB
-      # Maximum file storage
-      maxFileStore: 10737418240   # 10GB
-      # Enable clustering for high availability
-      cluster:
-        enabled: true
-        replicas: 3
-      # Stream retention policy
-      retention:
-        maxAge: "24h"      # Keep events for 24 hours
-        maxMsgs: 1000000   # Maximum 1M messages
-        maxBytes: 5368709120  # Maximum 5GB
+    # JetStream uses default configuration with enhanced resource allocation
     # Security context for enhanced security
     securityContext:
       runAsNonRoot: true
