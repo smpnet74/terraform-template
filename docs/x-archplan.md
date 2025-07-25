@@ -1,38 +1,59 @@
-# Zero-Trust Architecture Plan for AI Applications
-## Terraform Template with Cilium, Istio Ambient Mesh, Gateway API, and Kyverno
+# Production AI Platform Architecture Plan
+## CoAgents Travel Application with Crawl4AI MCP Server Integration
 
 ---
 
 ## Executive Summary
 
-This architectural plan outlines three approaches for implementing zero-trust networking for AI applications in a Kubernetes cluster using layered security with Cilium CNI, Istio Ambient Mesh, Gateway API (Kgateway), and Kyverno policy engine. The goal is to enable secure multi-tenant AI workloads while maintaining operational flexibility for ZenML MLOps, Argo Workflows, and KubeBlocks database operations.
+This architectural plan defines the production deployment architecture for the CoAgents Travel application ecosystem, integrating with the Crawl4AI MCP server and leveraging the existing Kubernetes platform infrastructure. The architecture focuses on delivering secure, scalable AI applications while maintaining operational flexibility for MLOps (ZenML), workflow automation (Argo), and database management (KubeBlocks).
+
+**Key Components:**
+- **CoAgents Travel App**: User-facing AI travel planning application (`app-travelexample` namespace)
+- **Crawl4AI MCP Server**: Internal web crawling and content extraction service (`app-crawl4ai` namespace)
+- **GitOps Deployment**: Automated deployment via GitHub Actions for both applications
+- **Platform Services**: ZenML, Argo Workflows, KubeBlocks integration for operational capabilities
 
 ---
 
 ## Current Infrastructure Assessment
 
-### Deployed Components
-- **Cilium CNI** (v1.17.5) with Hubble observability and Ambient Mesh compatibility
+### Platform Foundation
+- **Cilium CNI** (v1.17.5) with Hubble observability and L7 load balancing
 - **Istio Ambient Mesh** (v1.26.2) via Gloo Operator with ztunnel and waypoint proxies
 - **Gateway API** (v1.2.1) with Kgateway (v2.0.3) for ingress traffic management
-- **Kyverno** (v1.14.4) policy engine for governance and mutation
-- **ZenML MLOps** platform deployed in `zenml-system` namespace (ambient mesh enrolled)
-- **Argo Workflows** for CI/CD automation in `argo` namespace
-- **KubeBlocks** database operator in `kb-system` namespace
-- **Prometheus Operator** monitoring stack in `monitoring` namespace
+- **Kyverno** (v1.14.4) policy engine for governance and security enforcement
+- **Prometheus Operator** monitoring stack with Grafana dashboards
+- **Let's Encrypt TLS** automated certificate management via Cloudflare DNS
 
-### Target Application Profile
-- **AI Application Namespace**: `app-travelexample`
-- **MCP Server Namespaces**: `mcp-*` (e.g., `mcp-teamalpha`, `mcp-teambeta`)
-- **Expected Interactions**:
-  - Argo Workflows executing application-specific operational workflows (not CI/CD deployment)
-  - Argo Events triggering workflows within application namespace for operational tasks
-  - KubeBlocks provisioning application databases within app namespace
-  - ZenML developing datasets and deploying to application databases via KubeBlocks
-  - AI applications accessing LLMs through Kgateway proxy (no direct external LLM API calls)
-  - MCP servers/tools accessed by applications via MCP gateway through Kgateway routing
-  - Applications communicating with MCP services via waypoint proxies (no direct namespace-to-namespace networking)
-  - External ingress via Gateway API for user traffic
+### Deployed Applications
+
+#### **CoAgents Travel Application** (`app-travelexample`)
+- **Frontend**: Next.js 14.2.5 with TypeScript and CopilotKit integration
+- **Backend**: Python 3.12 with FastAPI, LangGraph (v0.2.50), and OpenAI GPT-4o
+- **Features**: AI-powered trip planning, interactive maps, human-in-the-loop workflows
+- **External Access**: HTTPRoute via Gateway API for user traffic
+- **Technology Stack**: 
+  - LangGraph StateGraph for conversational AI orchestration
+  - CopilotKit for AI-human collaboration patterns
+  - Google Maps API for geolocation and place search
+  - React-Leaflet for interactive mapping
+
+#### **Crawl4AI MCP Server** (`app-crawl4ai`)
+- **Image**: `unclecode/crawl4ai:0.7.0-r1` (prebuilt container)
+- **Protocol**: Model Context Protocol (MCP) over HTTP/WebSocket
+- **Features**: Web crawling, AI-powered content extraction, content analysis
+- **Internal Access**: ClusterIP service for internal consumption only
+- **Capabilities**: 
+  - Advanced web scraping with JavaScript execution
+  - AI-powered content summarization and extraction
+  - Multi-format content processing (HTML, PDF, text)
+  - Session persistence for complex crawling workflows
+
+### Platform Services Integration
+- **ZenML MLOps** (`zenml-system`): Dataset development and model deployment pipelines
+- **Argo Workflows** (`argo`): Operational automation and workflow orchestration
+- **KubeBlocks** (`kb-system`): Database operator for PostgreSQL, MongoDB, Redis, Neo4j
+- **Monitoring** (`monitoring`): Prometheus, Grafana, AlertManager stack
 
 ---
 
@@ -59,432 +80,433 @@ Our architecture implements multiple security layers following NSA's defense-in-
 
 ## Architecture Diagrams
 
-### High-Level Security Layers
+### 1. External User Flow Perspective
 
 ```mermaid
 graph TB
-    Internet[Internet Traffic] --> GW[Gateway API<br/>Kgateway]
-    GW --> WP[Waypoint Proxy<br/>L7 Processing]
-    WP --> ZT[ztunnel<br/>L4 Processing]
-    ZT --> APP[Application Pods]
-    
-    subgraph "Security Layers"
-        KY[Kyverno Policies<br/>Governance Layer]
-        CI[Cilium NetworkPolicies<br/>L3/L4 Network Layer]
-        IS[Istio AuthorizationPolicies<br/>L7 Service Layer]
-        GS[Gateway Security<br/>Ingress Filtering]
+    subgraph "Internet"
+        USER[External Users<br/>Web Browsers/Mobile Apps]
+        SEARCH[Search Engines<br/>External APIs]
     end
     
-    KY -.-> GW
-    KY -.-> WP
-    KY -.-> CI
-    KY -.-> IS
-    CI --> ZT
-    IS --> WP
-    GS --> GW
+    subgraph "Cluster Ingress"
+        GW[Gateway API<br/>travel.timbersedgearb.com]
+        TLS[Let's Encrypt TLS<br/>Automatic Certificate]
+    end
     
-    classDef security fill:#ff9999
-    classDef network fill:#99ccff
-    classDef service fill:#99ff99
-    classDef gateway fill:#ffcc99
+    subgraph "CoAgents Travel App"
+        FE[Next.js Frontend<br/>React + CopilotKit UI]
+        BE[FastAPI Backend<br/>LangGraph + OpenAI GPT-4o]
+        MAP[Interactive Maps<br/>Google Plans API]
+    end
     
-    class KY,CI,IS,GS security
-    class ZT network
-    class WP,APP service
-    class GW gateway
+    subgraph "AI Services"
+        LLM[OpenAI GPT-4o<br/>Travel Planning Agent]
+        GMAPS[Google Maps API<br/>Place Search & Geolocation]
+    end
+    
+    subgraph "Internal MCP Services"
+        MCP[Crawl4AI MCP Server<br/>Web Content Extraction]
+    end
+    
+    USER --> TLS
+    TLS --> GW
+    GW --> FE
+    FE <--> BE
+    BE --> LLM
+    BE --> GMAPS
+    BE --> MCP
+    MCP --> SEARCH
+    
+    classDef external fill:#e3f2fd
+    classDef ingress fill:#fff3e0
+    classDef app fill:#e8f5e8
+    classDef services fill:#f3e5f5
+    classDef mcp fill:#ffe0e6
+    
+    class USER,SEARCH external
+    class GW,TLS ingress
+    class FE,BE,MAP app
+    class LLM,GMAPS services
+    class MCP mcp
 ```
 
-### Namespace Communication Flow
+### 2. MCP Server Project Perspective
 
 ```mermaid
-graph LR
-    subgraph "External Services"
-        USER[Users/APIs]
-        LLM[LLM APIs<br/>OpenAI/Anthropic]
-    end
-    
-    subgraph "Ingress Gateway"
-        IGW[Kgateway Ingress<br/>User Traffic Only]
-    end
-    
-    subgraph "System Namespaces"
-        ARGO[argo<br/>Operational Workflows]
-        ARGOEV[argo-events<br/>App Namespace]
-        KB[kb-system<br/>Database Operator]
-        ZENML[zenml-system<br/>MLOps & Datasets]
-        MON[monitoring<br/>Observability]
-    end
-    
-    subgraph "Application Namespace"
-        APP[app-travelexample<br/>AI Application]
-        DB[(Application DB<br/>via KubeBlocks)]
-        ML[ZenML Dataset<br/>Pipeline]
-        WF[Argo Workflow<br/>Operations]
+graph TB
+    subgraph "MCP Server Security Boundaries"
+        subgraph "app-crawl4ai Namespace"
+            subgraph "Crawl4AI Pod"
+                MCP[Crawl4AI MCP Server<br/>Port 11235]
+                HEALTH[Health Check Endpoint<br/>/playground]
+            end
+            SVC[ClusterIP Service<br/>Internal Access Only]
+            SEC[Kubernetes Secrets<br/>API Keys (OpenAI/Anthropic)]
+        end
         
-        subgraph "Kgateway Waypoint Proxy Pod"
-            AIWP[AI Gateway Container<br/>LLM Egress Proxy]
-            MCPWP[MCP Proxy Container<br/>Cross-Namespace Router]
-            WP[Waypoint Proxy Core<br/>L7 Processing]
+        subgraph "Security Context"
+            USER999[Non-root User: 999<br/>Dropped Capabilities]
+            RESOURCES[Resource Limits<br/>1Gi RAM, 500m CPU]
+            AFFINITY[Pod Anti-affinity<br/>Node Distribution]
         end
     end
     
-    subgraph "MCP Namespaces"
-        MCP1[mcp-teamalpha<br/>MCP Server]
-        MCP2[mcp-teambeta<br/>MCP Tools]
+    subgraph "Internal Consumers"
+        TRAVEL[CoAgents Travel App<br/>MCP Client Integration]
+        FUTURE[Future Applications<br/>MCP Protocol Consumers]
     end
     
-    USER --> IGW
-    IGW --> APP
+    subgraph "External Services (MCP Server Egress)"
+        WEB[Target Websites<br/>Content Scraping]
+        AI[AI APIs<br/>Content Analysis]
+    end
     
-    APP --> WP
-    WP --> AIWP
-    AIWP --> LLM
+    subgraph "Istio Ambient Mesh"
+        ZTUNNEL[ztunnel<br/>L4 Encryption & Identity]
+        WAYPOINT[Waypoint Proxy<br/>L7 Policies (Optional)]
+    end
     
-    APP --> MCPWP
-    MCPWP --> MCP1
-    MCPWP --> MCP2
+    MCP --> SVC
+    SVC --> TRAVEL
+    SVC --> FUTURE
+    MCP --> WEB
+    MCP --> AI
+    MCP <--> SEC
     
-    ARGO -.-> WF
-    ARGOEV -.-> WF
-    KB -.-> DB
-    ZENML -.-> ML
-    MON -.-> APP
-    ML --> DB
-    WF --> APP
+    ZTUNNEL -.-> MCP
+    WAYPOINT -.-> SVC
     
-    classDef external fill:#e1f5fe
-    classDef ingress fill:#fff3e0
-    classDef system fill:#f3e5f5
-    classDef app fill:#e8f5e8
     classDef mcp fill:#ffe0e6
-    classDef waypoint fill:#e6f3ff
-    classDef proxy fill:#f0f8e6
+    classDef security fill:#ffecb3
+    classDef consumer fill:#e8f5e8
+    classDef external fill:#e3f2fd
+    classDef mesh fill:#f3e5f5
     
-    class USER,LLM external
-    class IGW ingress
-    class ARGO,ARGOEV,KB,ZENML,MON system
-    class APP,DB,ML,WF app
-    class MCP1,MCP2 mcp
-    class WP waypoint
-    class AIWP,MCPWP proxy
+    class MCP,HEALTH,SVC mcp
+    class USER999,RESOURCES,AFFINITY,SEC security
+    class TRAVEL,FUTURE consumer
+    class WEB,AI external
+    class ZTUNNEL,WAYPOINT mesh
+```
+
+### 3. Application Project Perspective
+
+```mermaid
+graph TB
+    subgraph "app-travelexample Namespace"
+        subgraph "Frontend Deployment"
+            FE[Next.js Frontend<br/>Port 3000]
+            FEHEALTH[Health Checks<br/>Liveness/Readiness]
+        end
+        
+        subgraph "Backend Deployment"
+            BE[FastAPI + LangGraph<br/>Port 8000]
+            BEHEALTH[Health Checks<br/>CopilotKit Endpoint]
+            STATE[In-Memory State<br/>LangGraph Checkpointer]
+        end
+        
+        subgraph "Services"
+            FESVC[Frontend Service<br/>ClusterIP]
+            BESVC[Backend Service<br/>ClusterIP]
+        end
+        
+        subgraph "Gateway Integration"
+            ROUTE[HTTPRoute<br/>travel.timbersedgearb.com]
+            REF[ReferenceGrant<br/>Cross-namespace Access]
+        end
+    end
+    
+    subgraph "External Dependencies"
+        OPENAI[OpenAI GPT-4o<br/>Conversation & Planning]
+        GMAPS[Google Maps API<br/>Place Search]
+        WEB[Web Content<br/>via Crawl4AI MCP]
+    end
+    
+    subgraph "Platform Integration"
+        CRAWL[Crawl4AI MCP Server<br/>app-crawl4ai.app-crawl4ai.svc]
+        DB[(PostgreSQL<br/>via KubeBlocks)]
+        ZENML[ZenML Pipelines<br/>Dataset Development]
+        ARGO[Argo Workflows<br/>Operational Tasks]
+    end
+    
+    subgraph "Security & Observability"
+        SECRETS[Kubernetes Secrets<br/>API Keys]
+        MONITOR[Prometheus Metrics<br/>Application Telemetry]
+        LOGS[Container Logs<br/>Centralized Logging]
+    end
+    
+    FE --> FESVC
+    BE --> BESVC
+    FESVC --> ROUTE
+    BESVC --> ROUTE
+    
+    BE --> OPENAI
+    BE --> GMAPS
+    BE --> CRAWL
+    BE --> DB
+    
+    ZENML -.-> DB
+    ARGO -.-> BE
+    
+    BE <--> SECRETS
+    FE --> MONITOR
+    BE --> MONITOR
+    FE --> LOGS
+    BE --> LOGS
+    
+    classDef app fill:#e8f5e8
+    classDef external fill:#e3f2fd
+    classDef platform fill:#f3e5f5
+    classDef security fill:#ffecb3
+    
+    class FE,BE,FESVC,BESVC,ROUTE,REF,FEHEALTH,BEHEALTH,STATE app
+    class OPENAI,GMAPS,WEB external
+    class CRAWL,DB,ZENML,ARGO platform
+    class SECRETS,MONITOR,LOGS security
+```
+
+### 4. Platform Services Integration Perspective
+
+```mermaid
+graph TB
+    subgraph "Application Layer"
+        TRAVEL[CoAgents Travel App<br/>app-travelexample]
+        CRAWL[Crawl4AI MCP Server<br/>app-crawl4ai]
+    end
+    
+    subgraph "ZenML MLOps Platform"
+        ZENMLSRV[ZenML Server<br/>zenml-system]
+        ZENMLUI[ZenML Dashboard<br/>MLOps Pipeline Management]
+        DATASETS[Dataset Pipelines<br/>Travel Data Processing]
+        MODELS[Model Registry<br/>AI Model Versioning]
+    end
+    
+    subgraph "Argo Workflow Platform"
+        ARGOCTL[Argo Controller<br/>argo namespace]
+        WORKFLOWS[Operational Workflows<br/>App Maintenance Tasks]
+        EVENTS[Argo Events<br/>Event-Driven Automation]
+        EVENTBUS[JetStream EventBus<br/>3Gi Storage, 3 Replicas]
+    end
+    
+    subgraph "KubeBlocks Database Platform"
+        KBCTL[KubeBlocks Controller<br/>kb-system]
+        POSTGRES[(PostgreSQL Clusters<br/>Application Databases)]
+        REDIS[(Redis Instances<br/>Caching & Sessions)]
+        MONGO[(MongoDB Clusters<br/>Document Storage)]
+        NEO4J[(Neo4j Instances<br/>Graph Databases)]
+    end
+    
+    subgraph "Monitoring & Observability"
+        PROMETHEUS[Prometheus<br/>Metrics Collection]
+        GRAFANA[Grafana<br/>Dashboards & Visualization]
+        ALERT[AlertManager<br/>Alert Routing]
+        KIALI[Kiali<br/>Service Mesh Observability]
+    end
+    
+    %% Application to Platform Services
+    TRAVEL --> ZENMLSRV
+    TRAVEL --> ARGOCTL
+    TRAVEL --> POSTGRES
+    CRAWL --> REDIS
+    
+    %% ZenML Integration
+    ZENMLSRV --> DATASETS
+    DATASETS --> POSTGRES
+    ZENMLSRV --> MODELS
+    
+    %% Argo Integration
+    ARGOCTL --> WORKFLOWS
+    EVENTS --> EVENTBUS
+    WORKFLOWS --> TRAVEL
+    
+    %% KubeBlocks Integration
+    KBCTL --> POSTGRES
+    KBCTL --> REDIS
+    KBCTL --> MONGO
+    KBCTL --> NEO4J
+    
+    %% Monitoring Integration
+    PROMETHEUS --> TRAVEL
+    PROMETHEUS --> CRAWL
+    PROMETHEUS --> ZENMLSRV
+    PROMETHEUS --> ARGOCTL
+    PROMETHEUS --> KBCTL
+    GRAFANA --> PROMETHEUS
+    ALERT --> PROMETHEUS
+    KIALI --> TRAVEL
+    KIALI --> CRAWL
+    
+    classDef app fill:#e8f5e8
+    classDef zenml fill:#e1f5fe
+    classDef argo fill:#fff3e0
+    classDef kb fill:#f3e5f5
+    classDef monitor fill:#ffecb3
+    
+    class TRAVEL,CRAWL app
+    class ZENMLSRV,ZENMLUI,DATASETS,MODELS zenml
+    class ARGOCTL,WORKFLOWS,EVENTS,EVENTBUS argo
+    class KBCTL,POSTGRES,REDIS,MONGO,NEO4J kb
+    class PROMETHEUS,GRAFANA,ALERT,KIALI monitor
+```
+
+### 5. Security Architecture Overview
+
+```mermaid
+graph TB
+    subgraph "Defense in Depth Layers"
+        subgraph "L1: Network Layer (Cilium)"
+            CNI[Cilium CNI<br/>L3/L4 Network Policies]
+            FW[Civo Firewall<br/>Port 80/443/6443]
+        end
+        
+        subgraph "L2: Service Mesh (Istio Ambient)"
+            ZTUNNEL[ztunnel<br/>mTLS & Identity]
+            WAYPOINT[Waypoint Proxies<br/>L7 Authorization]
+        end
+        
+        subgraph "L3: Gateway Layer (Kgateway)"
+            GATEWAY[Gateway API<br/>Ingress Control]
+            ROUTES[HTTPRoutes<br/>Traffic Routing]
+            TLS[Let's Encrypt<br/>TLS Termination]
+        end
+        
+        subgraph "L4: Policy Layer (Kyverno)"
+            POLICIES[Security Policies<br/>Baseline Enforcement]
+            MUTATION[Resource Mutation<br/>Security Defaults]
+            VALIDATION[Policy Validation<br/>Compliance Checks]
+        end
+    end
+    
+    subgraph "Application Security"
+        subgraph "CoAgents Travel"
+            APPSEC[Application Security<br/>- Non-root containers<br/>- Resource limits<br/>- Health checks]
+        end
+        
+        subgraph "Crawl4AI MCP"
+            MCPSEC[MCP Server Security<br/>- Internal-only access<br/>- Session affinity<br/>- API key management]
+        end
+    end
+    
+    subgraph "Data Security"
+        SECRETS[Kubernetes Secrets<br/>API Keys & Tokens]
+        ENCRYPTION[Encryption at Rest<br/>Civo Volume Encryption]
+        TRANSIT[Encryption in Transit<br/>mTLS via Istio]
+    end
+    
+    CNI --> ZTUNNEL
+    ZTUNNEL --> WAYPOINT
+    WAYPOINT --> GATEWAY
+    GATEWAY --> ROUTES
+    POLICIES --> CNI
+    POLICIES --> WAYPOINT
+    POLICIES --> GATEWAY
+    
+    APPSEC --> SECRETS
+    MCPSEC --> SECRETS
+    SECRETS --> ENCRYPTION
+    ZTUNNEL --> TRANSIT
+    
+    classDef network fill:#e3f2fd
+    classDef mesh fill:#f3e5f5
+    classDef gateway fill:#fff3e0
+    classDef policy fill:#ffecb3
+    classDef app fill:#e8f5e8
+    classDef data fill:#ffe0e6
+    
+    class CNI,FW network
+    class ZTUNNEL,WAYPOINT mesh
+    class GATEWAY,ROUTES,TLS gateway
+    class POLICIES,MUTATION,VALIDATION policy
+    class APPSEC,MCPSEC app
+    class SECRETS,ENCRYPTION,TRANSIT data
 ```
 
 ---
 
-## Zero-Trust Architecture Implementation
+## Production Security Implementation
 
-## **Graduated Security with Smart Defaults**
+### **Application-Focused Security Architecture**
 
-### Architecture Overview
-Implements progressive security controls that balance zero-trust principles with operational simplicity. Uses intelligent defaults that can be tightened over time.
+This implementation provides concrete security policies for the deployed CoAgents Travel application and Crawl4AI MCP server, emphasizing both application and MCP server security perspectives.
 
 ### Security Layer Implementation
 
-#### **1. Kyverno Policy Layer (Governance)**
+#### **1. CoAgents Travel Application Security** (`app-travelexample`)
+
+**Namespace Security Configuration:**
 ```yaml
-# Example: Graduated security enforcement
-- name: require-network-policies
-  match:
-    resources:
-      kinds: [Namespace]
-  generate:
-    kind: CiliumNetworkPolicy
-    name: default-deny-ingress
-    data:
-      spec:
-        podSelector: {}
-        policyTypes: ["Ingress"]
-```
-
-**Responsibilities:**
-- Automatic generation of baseline security policies for new namespaces
-- Enforcement of security baselines (mTLS, network policies, resource limits)
-- Mutation of workloads to add security labels and annotations
-- Validation of Istio AuthorizationPolicy compliance
-
-#### **2. Cilium Network Layer (L3/L4)**
-**Default Posture**: Namespace-level allow with explicit cross-namespace deny
-
-```yaml
-# app-travelexample namespace policy
+# Network policy for CoAgents Travel application
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
-  name: app-travelexample-base-policy
+  name: app-travelexample-network-policy
   namespace: app-travelexample
 spec:
   podSelector: {}
   ingress:
-  # Allow intra-namespace communication (includes waypoint proxy)
+  # Allow intra-namespace communication
   - fromEndpoints:
     - matchLabels:
         k8s:io.kubernetes.pod.namespace: app-travelexample
-  # Allow ZenML dataset development and deployment
-  - fromEndpoints:
-    - matchLabels:
-        k8s:io.kubernetes.pod.namespace: zenml-system
-        app: zenml-server
-  # Allow Argo operational workflows (not CI/CD)
-  - fromEndpoints:
-    - matchLabels:
-        k8s:io.kubernetes.pod.namespace: argo
-        app.kubernetes.io/component: workflow-controller
-  # Allow database operator for app database provisioning
-  - fromEndpoints:
-    - matchLabels:
-        k8s:io.kubernetes.pod.namespace: kb-system
-        app.kubernetes.io/name: kubeblocks
-  # Allow ingress Gateway traffic (user access only)
+  # Allow Gateway API ingress traffic
   - fromEndpoints:
     - matchLabels:
         k8s:io.kubernetes.pod.namespace: kgateway-system
         app.kubernetes.io/name: kgateway
-        gateway-role: ingress
-  egress:
-  # Allow DNS and system communication
-  - toEndpoints:
+  # Allow ZenML integration for dataset operations
+  - fromEndpoints:
     - matchLabels:
-        k8s:io.kubernetes.pod.namespace: kube-system
+        k8s:io.kubernetes.pod.namespace: zenml-system
+        app: zenml-server
+  # Allow Argo workflow operations
+  - fromEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: argo
+        app.kubernetes.io/component: workflow-controller
+  # Allow KubeBlocks database provisioning
+  - fromEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: kb-system
+        app.kubernetes.io/name: kubeblocks
+  egress:
+  # Allow DNS resolution
   - toServices:
     - k8sService:
         serviceName: kube-dns
         namespace: kube-system
-  # Allow egress to external LLM APIs via waypoint AI Gateway container
+  # Allow external API access (OpenAI, Google Maps)
   - toEntities: ["world"]
     toPorts:
     - ports:
       - port: "443"
         protocol: TCP
-      rules:
-        http:
-        - method: "POST"
-          path: "/v1/chat/completions"  # OpenAI API
-        - method: "POST" 
-          path: "/v1/messages"          # Anthropic API
-  # Allow direct communication to MCP servers (via MCP Proxy container)
+  # Allow access to Crawl4AI MCP server
   - toEndpoints:
     - matchLabels:
-        k8s:io.kubernetes.pod.namespace: mcp-teamalpha
-        app: mcp-server
-  - toEndpoints:
-    - matchLabels:
-        k8s:io.kubernetes.pod.namespace: mcp-teambeta
-        app: mcp-server
----
-# MCP namespace policy template (applied to all mcp-* namespaces)
-apiVersion: cilium.io/v2
-kind: CiliumNetworkPolicy
-metadata:
-  name: mcp-namespace-base-policy
-  namespace: mcp-teamalpha
-spec:
-  podSelector: {}
-  ingress:
-  # Allow intra-namespace communication (includes waypoint proxy)
-  - fromEndpoints:
-    - matchLabels:
-        k8s:io.kubernetes.pod.namespace: mcp-teamalpha
-  # Allow direct access from application namespace MCP proxy container
-  - fromEndpoints:
-    - matchLabels:
-        k8s:io.kubernetes.pod.namespace: app-travelexample
-        app.kubernetes.io/component: mcp-proxy
-  egress:
-  # Allow DNS
-  - toServices:
-    - k8sService:
-        serviceName: kube-dns
-        namespace: kube-system
-  # Deny all other egress (MCP servers should be self-contained tools)
+        k8s:io.kubernetes.pod.namespace: app-crawl4ai
+        app.kubernetes.io/name: crawl4ai-mcp-server
+    toPorts:
+    - ports:
+      - port: "11235"
+        protocol: TCP
 ```
 
-#### **3. Istio Ambient Mesh Layer (L7)**
-**Waypoint Proxy Strategy**: Selective deployment for critical services
-
+**Gateway API Configuration:**
 ```yaml
-# Kgateway waypoint for app-travelexample with AI and MCP extensions
-apiVersion: gateway.networking.k8s.io/v1
-kind: Gateway
-metadata:
-  name: app-travelexample-waypoint
-  namespace: app-travelexample
-  labels:
-    istio.io/waypoint-for: service
-  annotations:
-    kgateway.io/ai-gateway-enabled: "true"
-    kgateway.io/mcp-proxy-enabled: "true"
-spec:
-  gatewayClassName: kgateway-waypoint
-  listeners:
-  - name: proxy
-    port: 15088
-    protocol: istio.io/PROXY
----
-# AI Gateway configuration using Gateway API Inference Extension
-apiVersion: inference.networking.x-k8s.io/v1alpha2
-kind: InferenceModel
-metadata:
-  name: external-llm-proxy
-  namespace: app-travelexample
-spec:
-  modelName: "external-llm-gateway"
-  criticality: Critical
-  poolRef:
-    name: external-llm-pool
-  targetModels:
-  - name: openai-gpt4
-    weight: 70
-  - name: anthropic-claude
-    weight: 30
----
-# External LLM pool for egress routing
-apiVersion: inference.networking.x-k8s.io/v1alpha2
-kind: InferencePool
-metadata:
-  name: external-llm-pool
-  namespace: app-travelexample
-spec:
-  targetPortNumber: 443
-  selector:
-    app: external-llm-proxy
-  extensionRef:
-    name: external-llm-endpoint-picker
----
-# MCP Gateway configuration for cross-namespace routing
+# HTTPRoute for CoAgents Travel application
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: mcp-cross-namespace-routes
+  name: coagents-travel-ingress
   namespace: app-travelexample
-spec:
-  parentRefs:
-  - name: app-travelexample-waypoint
-    port: 8080
-  rules:
-  # Route to MCP Team Alpha
-  - matches:
-    - path:
-        type: PathPrefix
-        value: "/mcp/teamalpha/"
-    backendRefs:
-    - name: mcp-server
-      namespace: mcp-teamalpha
-      port: 8080
-  # Route to MCP Team Beta  
-  - matches:
-    - path:
-        type: PathPrefix
-        value: "/mcp/teambeta/"
-    backendRefs:
-    - name: mcp-server
-      namespace: mcp-teambeta
-      port: 8080
----
-# ReferenceGrant to allow cross-namespace access
-apiVersion: gateway.networking.k8s.io/v1beta1
-kind: ReferenceGrant
-metadata:
-  name: mcp-cross-namespace-access
-  namespace: mcp-teamalpha
-spec:
-  from:
-  - group: gateway.networking.k8s.io
-    kind: HTTPRoute
-    namespace: app-travelexample
-  to:
-  - group: ""
-    kind: Service
-    name: mcp-server
----
-apiVersion: gateway.networking.k8s.io/v1beta1
-kind: ReferenceGrant
-metadata:
-  name: mcp-cross-namespace-access
-  namespace: mcp-teambeta
-spec:
-  from:
-  - group: gateway.networking.k8s.io
-    kind: HTTPRoute
-    namespace: app-travelexample
-  to:
-  - group: ""
-    kind: Service
-    name: mcp-server
----
-# Authorization policy for AI application waypoint
-apiVersion: security.istio.io/v1beta1
-kind: AuthorizationPolicy
-metadata:
-  name: app-travelexample-waypoint-access
-  namespace: app-travelexample
-spec:
-  targetRefs:
-  - kind: Gateway
-    name: app-travelexample-waypoint
-  rules:
-  # Allow ZenML dataset development and deployment
-  - from:
-    - source:
-        principals: ["cluster.local/ns/zenml-system/sa/zenml-server"]
-    to:
-    - operation:
-        methods: ["GET", "POST", "PUT"]
-        paths: ["/api/v1/datasets/*", "/api/v1/models/*", "/database/*"]
-  # Allow Argo operational workflows (not CI/CD)
-  - from:
-    - source:
-        principals: ["cluster.local/ns/argo/sa/argo-workflow"]
-    to:
-    - operation:
-        methods: ["GET", "POST", "PUT", "DELETE"]
-        paths: ["/operations/*", "/workflows/*"]
-    when:
-    - key: request.headers[x-workflow-type]
-      values: ["operational"]
-  # Allow internal app access to MCP proxy and AI gateway
-  - from:
-    - source:
-        principals: ["cluster.local/ns/app-travelexample/sa/default"]
-    to:
-    - operation:
-        methods: ["GET", "POST"]
-        paths: ["/mcp/*", "/ai-gateway/*"]
----
-# Note: MCP namespaces do NOT need waypoint proxies for this architecture
-# The MCP Proxy container in the application namespace waypoint handles
-# cross-namespace routing directly to MCP servers
-```
-
-#### **4. Gateway API Layer (Ingress - User Traffic Only)**
-```yaml
-# HTTPRoute for external user traffic only (no LLM/MCP routing)
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:  
-  name: app-travelexample-ingress
 spec:
   parentRefs:
   - name: default-gateway
     namespace: kgateway-system
-  hostnames: ["travel.example.com"]
+  hostnames: ["travel.timbersedgearb.com"]
   rules:
-  # Application API routes for external users
-  - matches:
-    - path:
-        type: PathPrefix
-        value: "/api/"
-    filters:
-    - type: RequestHeaderModifier
-      requestHeaderModifier:
-        add:
-        - name: X-Request-Source
-          value: external
-        - name: X-Gateway-Type
-          value: ingress
-    backendRefs:
-    - name: travel-api
-      port: 8080
-  # Web UI routes
+  # Frontend routes
   - matches:
     - path:
         type: PathPrefix
@@ -495,61 +517,329 @@ spec:
         add:
         - name: X-Request-Source
           value: external-web
+        - name: X-Application
+          value: coagents-travel
     backendRefs:
-    - name: travel-web-ui
+    - name: coagents-travel-frontend
       port: 3000
----
-# Note: LLM and MCP traffic is NOT routed through ingress gateway
-# - LLM egress is handled by AI Gateway container in waypoint proxy
-# - MCP cross-namespace communication is handled by MCP Proxy container in waypoint proxy
-# - This separation ensures proper security boundaries and traffic isolation
+  # Backend API routes (including CopilotKit streaming)
+  - matches:
+    - path:
+        type: PathPrefix
+        value: "/api/"
+    filters:
+    - type: RequestHeaderModifier
+      requestHeaderModifier:
+        add:
+        - name: X-Request-Source
+          value: external-api
+        - name: X-Application
+          value: coagents-travel
+    backendRefs:
+    - name: coagents-travel-backend
+      port: 8000
 ```
 
-### **Benefits:**
-✅ **Operational Simplicity**: Gradual security implementation with intelligent defaults
-✅ **Developer Friendly**: Clear security boundaries without blocking development workflows
-✅ **Platform Integration**: Seamless ZenML dataset development, Argo operational workflows, and KubeBlocks database provisioning
-✅ **AI Gateway Security**: Kgateway waypoint AI container enforces controlled LLM egress with retry/timeout policies
-✅ **MCP Isolation**: Teams deploy MCP servers with waypoint proxy-mediated access (no direct cross-namespace communication)
-✅ **Traffic Separation**: Ingress (user traffic) completely separated from egress (LLM) and east-west (MCP) traffic flows
-✅ **Waypoint-Based Architecture**: Leverages Kgateway waypoint proxies for both AI Gateway and MCP Proxy functionality
-✅ **Scalability**: Policies and waypoint configurations automatically scale with namespace and team growth
-✅ **Auditability**: Comprehensive logging of all LLM egress and MCP cross-namespace communication
+#### **2. Crawl4AI MCP Server Security** (`app-crawl4ai`)
 
-### **Trade-offs:**
-⚠️ **Initial Permissiveness**: May allow some unnecessary communication initially
-⚠️ **Complexity Growth**: Requires ongoing policy refinement as teams and MCP services expand
-⚠️ **Waypoint Dependency**: LLM egress and MCP access depends on Kgateway waypoint proxy reliability
-⚠️ **Proxy Container Overhead**: AI Gateway and MCP Proxy containers add resource consumption to waypoint pods
-⚠️ **Configuration Complexity**: Multiple CRDs required (Gateway, MCPProxy, AI Gateway config) for full functionality
+**MCP Server-Focused Security:**
+```yaml
+# Network policy for MCP server - restrictive internal-only access
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: crawl4ai-mcp-security-policy
+  namespace: app-crawl4ai
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: crawl4ai-mcp-server
+  ingress:
+  # Allow intra-namespace communication (service mesh)
+  - fromEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: app-crawl4ai
+  # Allow access from CoAgents Travel app ONLY
+  - fromEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: app-travelexample
+        app.kubernetes.io/name: coagents-travel-backend
+    toPorts:
+    - ports:
+      - port: "11235"
+        protocol: TCP
+  # Deny all other ingress (no external access)
+  egress:
+  # Allow DNS resolution
+  - toServices:
+    - k8sService:
+        serviceName: kube-dns
+        namespace: kube-system
+  # Allow external website crawling (controlled egress)
+  - toEntities: ["world"]
+    toPorts:
+    - ports:
+      - port: "80"
+        protocol: TCP
+      - port: "443"
+        protocol: TCP
+  # Allow AI API access for content analysis
+  - toFQDNs:
+    - matchName: "api.openai.com"
+    - matchName: "api.anthropic.com"
+    toPorts:
+    - ports:
+      - port: "443"
+        protocol: TCP
+        rules:
+          http:
+          - method: "POST"
+            path: "/v1/.*"
+```
+
+**MCP Server Service Configuration:**
+```yaml
+# Service configuration emphasizing internal-only access
+apiVersion: v1
+kind: Service
+metadata:
+  name: crawl4ai-service
+  namespace: app-crawl4ai
+  labels:
+    app.kubernetes.io/name: crawl4ai-mcp-server
+    app.kubernetes.io/component: mcp-server
+spec:
+  type: ClusterIP  # Internal access only
+  sessionAffinity: ClientIP  # MCP session persistence
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 3600  # 1-hour MCP session timeout
+  selector:
+    app.kubernetes.io/name: crawl4ai-mcp-server
+  ports:
+  - name: mcp-http
+    port: 11235
+    targetPort: 11235
+    protocol: TCP
+```
+
+#### **3. Cross-Namespace MCP Integration Security**
+
+**ReferenceGrant for Controlled Access:**
+```yaml
+# Allow CoAgents Travel app to access MCP server
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: crawl4ai-mcp-access
+  namespace: app-crawl4ai
+spec:
+  from:
+  - group: ""
+    kind: Service
+    namespace: app-travelexample
+  to:
+  - group: ""
+    kind: Service
+    name: crawl4ai-service
+```
+
+**Istio Authorization Policy for MCP Access:**
+```yaml
+# L7 authorization for MCP server access
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: crawl4ai-mcp-access-control
+  namespace: app-crawl4ai
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: crawl4ai-mcp-server
+  rules:
+  # Allow only CoAgents Travel backend to access MCP server
+  - from:
+    - source:
+        principals: ["cluster.local/ns/app-travelexample/sa/default"]
+    to:
+    - operation:
+        methods: ["GET", "POST", "OPTIONS"]
+        ports: ["11235"]
+        paths: ["/mcp/*", "/playground", "/health"]
+    when:
+    - key: source.labels[app.kubernetes.io/name]
+      values: ["coagents-travel-backend"]
+```
+
+#### **4. Application Security Hardening**
+
+**Pod Security Standards (Kyverno Policies):**
+```yaml
+# Kyverno policy for application pod security
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: coagents-travel-security-baseline
+spec:
+  validationFailureAction: enforce
+  background: true
+  rules:
+  - name: require-non-root-containers
+    match:
+      any:
+      - resources:
+          kinds: ["Pod"]
+          namespaces: ["app-travelexample", "app-crawl4ai"]
+    validate:
+      message: "Containers must run as non-root user"
+      pattern:
+        spec:
+          securityContext:
+            runAsNonRoot: true
+          containers:
+          - securityContext:
+              runAsNonRoot: true
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop: ["ALL"]
+  - name: require-resource-limits
+    match:
+      any:
+      - resources:
+          kinds: ["Pod"]
+          namespaces: ["app-travelexample", "app-crawl4ai"]
+    validate:
+      message: "Containers must have resource limits"
+      pattern:
+        spec:
+          containers:
+          - resources:
+              limits:
+                memory: "?*"
+                cpu: "?*"
+              requests:
+                memory: "?*"
+                cpu: "?*"
+```
+
+### **MCP Server Exposure Patterns**
+
+#### **Pattern 1: Internal-Only MCP Servers** (Current: Crawl4AI)
+- **Access**: Applications within cluster only
+- **Security**: ClusterIP service, namespace network policies
+- **Use Case**: Shared services like web crawling, data processing
+
+#### **Pattern 2: Internet-Exposed MCP Servers** (Future Pattern)
+- **Access**: External clients via Gateway API with authentication
+- **Security**: HTTPRoute with authentication filters, rate limiting
+- **Use Case**: Public APIs, third-party integrations
+
+#### **Pattern 3: Hybrid MCP Servers** (Future Pattern)
+- **Access**: Both internal applications and external authenticated clients
+- **Security**: Multiple services/routes with different security contexts
+- **Use Case**: Multi-tenant services with both internal and external consumers
+
+---
+
+## Implementation Benefits & Trade-offs
+
+### **Architecture Benefits:**
+✅ **Concrete Implementation**: Based on actual deployed applications rather than theoretical constructs  
+✅ **Application-First Security**: Policies tailored to CoAgents Travel and Crawl4AI MCP server requirements  
+✅ **MCP Server Security**: Dedicated security perspective for internal-only MCP service deployment  
+✅ **Platform Integration**: Seamless ZenML dataset development, Argo operational workflows, and KubeBlocks database provisioning  
+✅ **GitOps Deployment**: Automated deployment pipeline with GitHub Actions for both applications  
+✅ **Multiple Security Perspectives**: External user flow, MCP server, application, and platform service viewpoints  
+✅ **Graduated Exposure Patterns**: Support for internal-only, internet-exposed, and hybrid MCP server deployment patterns  
+✅ **Production-Ready**: Based on actual running workloads in production environment  
+
+### **Security Considerations:**
+🔒 **Defense in Depth**: Multiple security layers from network (Cilium) to service mesh (Istio) to gateway (Kgateway)  
+🔒 **Least Privilege**: MCP servers only accessible by authorized applications  
+🔒 **Network Segmentation**: Clear namespace boundaries with controlled cross-namespace communication  
+🔒 **External API Control**: Governed access to OpenAI, Google Maps, and web crawling targets  
+🔒 **Session Management**: MCP session affinity for complex crawling workflows  
+🔒 **Monitoring Integration**: Prometheus metrics and logging for security observability  
+
+### **Operational Trade-offs:**
+⚠️ **Application State**: In-memory state limitations for single-replica deployments  
+⚠️ **MCP Server Scaling**: Session affinity impacts horizontal scaling capabilities  
+⚠️ **Cross-Namespace Complexity**: ReferenceGrants and authorization policies for MCP access  
+⚠️ **External Dependencies**: Reliance on external APIs (OpenAI, Google Maps) for core functionality  
+⚠️ **Certificate Management**: Let's Encrypt automation dependency for TLS termination  
+
+---
+
+## Future Architecture Evolution
+
+### **Immediate Enhancements** (Next 3 months)
+1. **MCP Client Integration**: Enhance CoAgents Travel to use MCP protocol for Crawl4AI communication
+2. **Database Integration**: Deploy KubeBlocks PostgreSQL for CoAgents Travel persistent state
+3. **ZenML Pipelines**: Implement dataset development workflows for travel planning enhancement
+4. **Monitoring Dashboard**: Deploy Grafana dashboards for application and MCP server metrics
+
+### **Medium-Term Expansion** (3-6 months)
+1. **Additional MCP Servers**: Deploy specialized MCP servers for specific domains (weather, news, social media)
+2. **Authentication Layer**: Implement OAuth2/OIDC for external user authentication
+3. **Rate Limiting**: Add gateway-level rate limiting for external API protection
+4. **Multi-Application Platform**: Deploy additional AI applications consuming MCP server ecosystem
+
+### **Long-Term Platform Evolution** (6-12 months)
+1. **Multi-Tenant MCP Platform**: Support for team-specific MCP server deployments
+2. **Internet-Exposed MCP Services**: Public MCP server APIs with authentication
+3. **Cross-Cluster Federation**: Multi-cluster MCP server federation for high availability
+4. **Advanced Security**: RBAC, admission controllers, and runtime security monitoring
 
 ---
 
 ## Conclusion
 
-**Graduated Security with Smart Defaults** provides the optimal balance of security, operational simplicity, and platform integration for AI workloads with multi-team MCP server deployment. It enables a progressive security implementation that can evolve with organizational maturity while maintaining the operational flexibility required for:
+This production AI platform architecture successfully demonstrates the deployment of concrete AI applications (CoAgents Travel) integrated with specialized MCP servers (Crawl4AI) within a secure, observable Kubernetes environment. The architecture provides:
 
-- **ZenML dataset development** and deployment to application databases via KubeBlocks
-- **Argo operational workflows** within application namespaces (distinct from CI/CD)
-- **Kgateway AI Gateway containers** in waypoint proxies enforcing controlled LLM egress with retry/timeout policies
-- **Kgateway MCP Proxy containers** in waypoint proxies enabling secure cross-namespace MCP service communication
-- **Complete traffic separation** between ingress (user), egress (LLM), and east-west (MCP) traffic flows
-- **Waypoint-based architecture** leveraging Kgateway's AI and MCP extensions for enterprise-grade proxy functionality
+**For Applications:**
+- Secure external user access via Gateway API with TLS termination
+- Controlled access to external APIs (OpenAI, Google Maps) for AI functionality
+- Integration with platform services (ZenML, Argo, KubeBlocks) for operational capabilities
+- Comprehensive monitoring and logging for production operation
 
-The layered defense-in-depth architecture ensures multiple security boundaries while the intelligent waypoint proxy configuration reduces operational burden. This approach is most suitable for organizations building AI platforms where teams deploy MCP servers requiring controlled cross-namespace access, applications need governed LLM egress, and strict traffic separation is mandatory without disrupting development workflows.
+**For MCP Servers:**
+- Internal-only deployment pattern with controlled application access
+- Secure external web crawling capabilities with content analysis
+- Session persistence for complex MCP workflows
+- Potential evolution to internet-exposed or hybrid deployment patterns
 
-**Key Architectural Insight**: By positioning AI Gateway and MCP Proxy as containers within Kgateway waypoint proxies rather than separate services, this approach provides enterprise-grade functionality while maintaining the simplicity of the Istio Ambient Mesh model with enhanced Kgateway capabilities.
+**For Platform Operations:**
+- GitOps deployment automation for both application and MCP server components
+- Defense-in-depth security with multiple layers (network, service mesh, gateway, policy)
+- Platform service integration for MLOps, workflow automation, and database management
+- Comprehensive observability with metrics, logging, and service mesh visualization
+
+The architecture removes previous ambiguity by focusing on actual deployed applications while maintaining the flexibility to evolve toward more complex multi-tenant MCP server platforms. The multiple perspective diagrams provide clear visualization of security boundaries, data flows, and integration patterns for different stakeholders.
+
+**Key Success Factor**: The architecture balances the security needs of both user-facing applications (always internet-exposed) and MCP servers (flexible exposure patterns) while leveraging the existing Kubernetes platform infrastructure for operational excellence.
 
 ---
 
 ## Next Steps
 
-1. **Review and approve** the architectural approach
-2. **Customize policies** for specific AI application requirements  
-3. **Deploy foundational components** (Kyverno, Cilium policies, waypoint proxies)
-4. **Establish monitoring** and observability framework
-5. **Begin gradual rollout** to production workloads
+### **Immediate Actions** (Week 1-2)
+1. **Review** the updated architecture plan with stakeholders
+2. **Validate** security policies against actual application deployments
+3. **Implement** missing Cilium NetworkPolicies and Istio AuthorizationPolicies
+4. **Test** MCP client integration between CoAgents Travel and Crawl4AI
+
+### **Short-Term Implementation** (Month 1)
+1. **Deploy** KubeBlocks PostgreSQL cluster for CoAgents Travel state persistence
+2. **Implement** ZenML dataset pipelines for travel planning data enhancement
+3. **Create** Grafana dashboards for application and MCP server monitoring
+4. **Establish** alerting rules for security policy violations and application health
+
+### **Ongoing Operations**
+1. **Monitor** security policy effectiveness and adjust as needed
+2. **Scale** MCP server deployments based on application demand
+3. **Evolve** toward additional MCP servers for specialized capabilities
+4. **Document** lessons learned for future AI application deployments
 
 ---
 
-*This architectural plan provides a comprehensive foundation for implementing zero-trust networking in your Kubernetes AI platform. The layered security approach ensures robust protection while maintaining operational flexibility for your MLOps and database platform requirements.*
+*This refined architectural plan provides a production-ready foundation for AI application deployment with MCP server integration, emphasizing concrete security implementations over theoretical constructs while maintaining flexibility for future platform evolution.*

@@ -19,7 +19,7 @@ spec:
     persistence:
       storageClassName: "civo-volume"
       accessMode: ReadWriteOnce
-      volumeSize: 20Gi  # Increased size for cluster-wide events
+      volumeSize: 3Gi  # Increased size for cluster-wide events
     # Resource limits for stable cluster-wide operations
     resources:
       requests:
