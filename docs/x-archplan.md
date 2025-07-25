@@ -142,11 +142,11 @@ graph TB
                 HEALTH[Health Check Endpoint<br/>/playground]
             end
             SVC[ClusterIP Service<br/>Internal Access Only]
-            SEC[Kubernetes Secrets<br/>API Keys (OpenAI/Anthropic)]
+            SEC[Kubernetes Secrets<br/>API Keys OpenAI/Anthropic]
         end
         
         subgraph "Security Context"
-            USER999[Non-root User: 999<br/>Dropped Capabilities]
+            USER999[Non-root User 999<br/>Dropped Capabilities]
             RESOURCES[Resource Limits<br/>1Gi RAM, 500m CPU]
             AFFINITY[Pod Anti-affinity<br/>Node Distribution]
         end
@@ -157,14 +157,14 @@ graph TB
         FUTURE[Future Applications<br/>MCP Protocol Consumers]
     end
     
-    subgraph "External Services (MCP Server Egress)"
+    subgraph "External Services MCP Server Egress"
         WEB[Target Websites<br/>Content Scraping]
         AI[AI APIs<br/>Content Analysis]
     end
     
     subgraph "Istio Ambient Mesh"
         ZTUNNEL[ztunnel<br/>L4 Encryption & Identity]
-        WAYPOINT[Waypoint Proxy<br/>L7 Policies (Optional)]
+        WAYPOINT[Waypoint Proxy<br/>L7 Policies Optional]
     end
     
     MCP --> SVC
