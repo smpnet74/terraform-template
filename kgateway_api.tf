@@ -27,7 +27,7 @@ resource "helm_release" "kgateway_crds" {
   name             = "kgateway-crds"
   repository       = "" # Using OCI registry instead of traditional Helm repo
   chart            = "oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds"
-  version          = "v2.0.3"  # Latest stable release as per docs
+  version          = "v2.0.3"  # Stable version
   namespace        = "kgateway-system"
   create_namespace = true
   atomic           = true
@@ -51,7 +51,7 @@ resource "helm_release" "kgateway" {
   name             = "kgateway"
   repository       = "" # Using OCI registry instead of traditional Helm repo
   chart            = "oci://cr.kgateway.dev/kgateway-dev/charts/kgateway"
-  version          = "v2.0.3"  # Updated to latest stable release
+  version          = "v2.0.3"  # Stable version
   namespace        = "kgateway-system"
   create_namespace = true
   atomic           = false  # Set to false to prevent rollback on timeout
@@ -83,6 +83,7 @@ resource "helm_release" "kgateway" {
           }
         }
       ]
+      # AI Extension removed for v2.0.3 compatibility
       # Add resource requests for Gateway proxy pods to satisfy Kyverno policies
       gatewayProxies = {
         default = {
