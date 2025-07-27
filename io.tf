@@ -229,6 +229,13 @@ variable "istio_version" {
   default     = "1.26.2"
 }
 
+# AgentGateway Configuration
+variable "enable_agentgateway" {
+  description = "Whether to deploy AgentGateway for MCP and A2A communication"
+  type        = bool
+  default     = false
+}
+
 
 
 
