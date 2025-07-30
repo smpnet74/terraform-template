@@ -64,6 +64,114 @@ YAML
   ]
 }
 
+# PersistentVolumeClaim for AgentGateway configuration storage
+resource "kubectl_manifest" "agentgateway_pvc" {
+  yaml_body = <<-YAML
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: agentgateway-config-storage
+  namespace: ai-gateway-system
+  labels:
+    app.kubernetes.io/name: agentgateway
+    app.kubernetes.io/component: storage
+    app.kubernetes.io/managed-by: terraform
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: civo-volume  # Civo default storage class
+YAML
+
+  depends_on = [
+    kubectl_manifest.agentgateway_namespace
+  ]
+}
+
+# InitContainer Job to initialize PVC with base configuration
+resource "kubectl_manifest" "agentgateway_config_init" {
+  yaml_body = <<-YAML
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: agentgateway-config-init
+  namespace: ai-gateway-system
+  labels:
+    app.kubernetes.io/name: agentgateway
+    app.kubernetes.io/component: config-init
+    app.kubernetes.io/managed-by: terraform
+spec:
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agentgateway
+        app.kubernetes.io/component: config-init
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: config-init
+        image: busybox:1.35
+        command:
+        - /bin/sh
+        - -c
+        - |
+          # Only initialize if config.yaml doesn't exist
+          if [ ! -f /config/config.yaml ]; then
+            echo "Initializing AgentGateway configuration..."
+            cat > /config/config.yaml << 'EOF'
+          # AgentGateway configuration for MCP protocols
+          binds:
+          - port: 8080
+            listeners:
+            - routes:
+              - policies:
+                  cors:
+                    allowOrigins:
+                      - "*"
+                    allowHeaders:
+                      - "mcp-protocol-version"
+                      - "content-type"
+                      - "*"
+                    allowMethods:
+                      - "GET"
+                      - "POST" 
+                      - "PUT"
+                      - "DELETE"
+                      - "OPTIONS"
+                backends:
+                - mcp:
+                    name: "mcp-everything"
+                    targets:
+                    - name: "everything"
+                      stdio:
+                        cmd: "npx"
+                        args: ["@modelcontextprotocol/server-everything"]
+          EOF
+            # Set proper ownership and permissions for AgentGateway user (1000:1000)
+            chown 1000:1000 /config/config.yaml
+            chmod 664 /config/config.yaml
+            echo "Configuration initialized successfully with proper permissions"
+          else
+            echo "Configuration already exists, ensuring proper permissions"
+            chown 1000:1000 /config/config.yaml
+            chmod 664 /config/config.yaml
+          fi
+        volumeMounts:
+        - name: config-storage
+          mountPath: /config
+      volumes:
+      - name: config-storage
+        persistentVolumeClaim:
+          claimName: agentgateway-config-storage
+YAML
+
+  depends_on = [
+    kubectl_manifest.agentgateway_pvc
+  ]
+}
+
 # Service Account for AgentGateway
 resource "kubectl_manifest" "agentgateway_service_account" {
   yaml_body = <<-YAML
@@ -198,9 +306,9 @@ spec:
         - name: AGENTGATEWAY_ADMIN_ADDR
           value: "0.0.0.0:15000"
         volumeMounts:
-        - name: config
+        - name: config-storage
           mountPath: /etc/agentgateway
-          readOnly: true
+          readOnly: false
         resources:
           requests:
             cpu: "100m"
@@ -232,13 +340,13 @@ spec:
             - ALL
           readOnlyRootFilesystem: false
       volumes:
-      - name: config
-        configMap:
-          name: agentgateway-config
+      - name: config-storage
+        persistentVolumeClaim:
+          claimName: agentgateway-config-storage
 YAML
 
   depends_on = [
-    kubectl_manifest.agentgateway_config,
+    kubectl_manifest.agentgateway_config_init,
     kubectl_manifest.agentgateway_service_account,
     kubectl_manifest.agentgateway_cluster_role_binding
   ]

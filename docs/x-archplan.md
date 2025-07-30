@@ -843,3 +843,29 @@ The architecture removes previous ambiguity by focusing on actual deployed appli
 ---
 
 *This refined architectural plan provides a production-ready foundation for AI application deployment with MCP server integration, emphasizing concrete security implementations over theoretical constructs while maintaining flexibility for future platform evolution.*
+
+ Configuration Decision Matrix:
+
+  | Pattern                | Ingress L7 | Mesh L7  | Resource Usage | Complexity | Best For
+           |
+  |------------------------|------------|----------|----------------|------------|--------------
+  ---------|
+  | #1 No Integration      | ❌          | ❌        | Low            | Low        | Current
+  state         |
+  | #2 Mesh-Aware Ingress  | ✅          | ❌        | Low            | Low        | Edge
+  security focus   |
+  | #3 Selective Waypoints | ✅          | Partial  | Medium         | Medium     | Mixed
+  requirements    |
+  | #4 Unified Dual-Role   | ✅          | ✅        | High           | Medium     | Full L7
+  everywhere    |
+  | #5 Per-Namespace       | ✅          | ✅        | High           | High       | Team
+  autonomy         |
+  | #6 Shared Waypoint     | ✅          | ✅        | Medium         | Medium     | Resource
+  efficiency   |
+  | #7 Hybrid Approach     | ✅          | Mixed    | Medium         | High       |
+  Migration/flexibility |
+  | #8 Service-Level       | ✅          | Granular | Low-Medium     | High       | Precise
+  control       |
+
+  Recommendation Path: Start with #2 (mesh-aware ingress), then add #3 (selective waypoints) as
+  needed. This gives you incremental adoption without over-engineering.
